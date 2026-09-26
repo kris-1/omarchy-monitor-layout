@@ -13,7 +13,7 @@ the result depends on the order the outputs come up. If your external monitor
 sits to the right of your laptop but the pointer has to leave through the
 *left* edge to reach it, this plugin fixes it and keeps it fixed.
 
-![Display widget with the DISPLAY SETTINGS section](preview.png)
+![The settings window of a display next to the Display widget with its DISPLAY SETTINGS section](preview.png)
 
 ## Features
 

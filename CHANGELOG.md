@@ -6,6 +6,10 @@ All notable changes to this project are documented here. The format follows
 
 ## [Unreleased]
 
+### Changed
+
+- `preview.png` shows the settings window next to the panel.
+
 ## [0.5.1] - 2026-09-26
 
 ### Changed
