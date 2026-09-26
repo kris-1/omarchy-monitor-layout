@@ -43,8 +43,9 @@ sits to the right of your laptop but the pointer has to leave through the
   `hyprctl eval`, which the legacy config parser does not support.
 - `hyprctl` and `bash`, both already present on Omarchy.
 
-No packages, installers, services, `sudo` or network access are involved. The
-plugin runs inside `omarchy-shell` like any other shell plugin.
+It needs no extra packages, no elevated privileges, no system services and no
+network access. The plugin runs inside `omarchy-shell` like any other shell
+plugin.
 
 ## Install
 

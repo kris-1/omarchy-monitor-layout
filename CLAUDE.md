@@ -52,6 +52,8 @@ for Hyprland, and nothing else. See README.md for the user-facing description.
   `omacom/omarchy-plugin-marketplace`. Its requirements: `manifest.json`,
   README (Install/Usage/Configure/Remove, dependencies), LICENSE and an
   optional `preview.png`, all in the repository root.
-- The marketplace runs a static security scan: never add install scripts,
-  `sudo`/`pkexec`, `systemctl`, binaries or `curl | sh`.
+- The marketplace runs a static security scan (see its SECURITY.md) that
+  flags privilege escalation, system service management, bundled binaries,
+  installers and piping downloads into a shell, even when only mentioned in
+  docs. Keep the plugin free of all of them and avoid naming those commands.
 - The plugin id `monitor-layout` is permanent once listed.
