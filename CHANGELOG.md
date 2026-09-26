@@ -6,6 +6,16 @@ All notable changes to this project are documented here. The format follows
 
 ## [Unreleased]
 
+## [0.4.1] - 2026-09-26
+
+### Fixed
+
+- Desktops with identical monitors: tiles show the model ("DELL P2419H")
+  instead of the vendor, with the port appended when two tiles would read
+  the same.
+- Identical monitors that report no serial number share a description; they
+  are now keyed by port so they can still be reordered.
+
 ## [0.4.0] - 2026-09-26
 
 ### Changed

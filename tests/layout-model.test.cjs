@@ -38,10 +38,42 @@ test("disabled and mirrored monitors are not arranged", () => {
   assert.equal(Model.isArrangeable(ultrawide), true)
 })
 
-test("tileLabel names the built-in panel and trims the serial", () => {
+test("tileLabel names the built-in panel and shows the model", () => {
   assert.equal(Model.tileLabel(laptop), "Built-in")
+  assert.equal(Model.tileLabel({ ...ultrawide, model: "U34V5C" }), "U34V5C")
   assert.equal(Model.tileLabel(ultrawide), "AOC U34V5C")
   assert.equal(Model.tileLabel({ name: "DP-3", description: "" }), "DP-3")
+})
+
+// Desktop: two identical monitors, no built-in panel.
+const dell = (name, x, serial) => ({
+  name,
+  description: serial ? "Dell Inc. DELL P2419H " + serial : "Dell Inc. DELL P2419H",
+  make: "Dell Inc.", model: "DELL P2419H", serial: serial || "",
+  width: 1920, height: 1080, scale: 1, transform: 0,
+  x, y: 0, focused: false, disabled: false, mirrorOf: "none"
+})
+
+test("desktop: identical models get distinct labels and keys", () => {
+  const tiles = Model.tilesFromMonitors([dell("DP-1", 0, "S1"), dell("DP-2", 1920, "S2")])
+  assert.deepEqual(tiles.map(t => t.label), ["DELL P2419H · DP-1", "DELL P2419H · DP-2"])
+  assert.deepEqual(tiles.map(t => t.key), ["Dell Inc. DELL P2419H S1", "Dell Inc. DELL P2419H S2"])
+  assert.ok(tiles.every(t => !t.internal))
+})
+
+test("desktop: identical monitors without serials are keyed by port", () => {
+  const a = dell("DP-1", 0), b = dell("DP-2", 1920)
+  const tiles = Model.tilesFromMonitors([a, b])
+  assert.deepEqual(tiles.map(t => t.key), ["DP-1", "DP-2"])
+  const positions = Model.computePositions([a, b], ["DP-2", "DP-1"])
+  assert.deepEqual(positions.map(p => [p.name, p.x]), [["DP-2", 0], ["DP-1", 1920]])
+})
+
+test("desktop: three monitors reorder from the saved order", () => {
+  const monitors = [dell("DP-1", 0, "S1"), dell("DP-2", 1920, "S2"), { ...ultrawide, x: 3840 }]
+  const order = [Model.monitorKey(ultrawide), "Dell Inc. DELL P2419H S2", "Dell Inc. DELL P2419H S1"]
+  const positions = Model.computePositions(monitors, order)
+  assert.deepEqual(positions.map(p => [p.name, p.x]), [["HDMI-A-1", 0], ["DP-2", 3440], ["DP-1", 5360]])
 })
 
 test("parseOrder tolerates missing or malformed files", () => {

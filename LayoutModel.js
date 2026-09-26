@@ -1,15 +1,36 @@
 // Pure layout logic shared by Service.qml, Panel.qml and the Node tests.
 //
 // A layout is a left-to-right order of monitor keys. A key is the monitor's
-// description (make, model and serial, stable across ports) or, when that is
-// empty, its output name. Monitors are placed in a single top-aligned row with
+// description (make, model and serial, stable across ports) or its output
+// name when the description is empty or shared by another connected monitor
+// (identical models that report no serial number). Monitors are placed in a single top-aligned row with
 // no gaps, using their logical (post-scale, post-rotation) widths.
 
 var INTERNAL_OUTPUT = /^(eDP|LVDS|DSI)-/
 
-function monitorKey(monitor) {
-  var description = String((monitor && monitor.description) || "").trim()
-  return description !== "" ? description : String((monitor && monitor.name) || "")
+function description(monitor) {
+  return String((monitor && monitor.description) || "").trim()
+}
+
+// Descriptions that more than one of `monitors` reports.
+function sharedDescriptions(monitors) {
+  var seen = {}
+  var shared = {}
+  for (var i = 0; i < (monitors || []).length; i++) {
+    var d = description(monitors[i])
+    if (d === "") continue
+    if (seen[d]) shared[d] = true
+    seen[d] = true
+  }
+  return shared
+}
+
+// `shared` (from sharedDescriptions) lists descriptions that cannot tell
+// monitors apart; those monitors are keyed by output name instead.
+function monitorKey(monitor, shared) {
+  var d = description(monitor)
+  if (d !== "" && !(shared && shared[d])) return d
+  return String((monitor && monitor.name) || "")
 }
 
 function isInternal(monitor) {
@@ -32,12 +53,14 @@ function logicalSize(monitor) {
   return { w: Math.round(width / scale), h: Math.round(height / scale) }
 }
 
-// "AOC U34V5C WQVP7HA000383" -> "AOC U34V5C": make and model, no serial.
+// Short tile label: "Built-in" for the laptop panel, otherwise the model
+// ("U34V5C", "DELL P2419H"), falling back to the description's first words
+// and then to the output name.
 function tileLabel(monitor) {
   if (isInternal(monitor)) return "Built-in"
-  var words = String(monitor.description || "").trim().split(/\s+/).filter(function(word) {
-    return word !== ""
-  })
+  var model = String(monitor.model || "").trim()
+  if (model !== "") return model
+  var words = description(monitor).split(/\s+/).filter(function(word) { return word !== "" })
   return words.length ? words.slice(0, 2).join(" ") : String(monitor.name || "")
 }
 
@@ -66,8 +89,8 @@ function mergeOrder(keys, previous) {
   return merged
 }
 
-function rank(order, monitor) {
-  var index = order.indexOf(monitorKey(monitor))
+function rank(order, monitor, shared) {
+  var index = order.indexOf(monitorKey(monitor, shared))
   if (index === -1) index = order.indexOf(String(monitor.name || ""))
   return index
 }
@@ -76,10 +99,11 @@ function rank(order, monitor) {
 // keeping their current left-to-right position.
 function sortMonitors(monitors, order) {
   var list = (monitors || []).filter(isArrangeable).slice()
+  var shared = sharedDescriptions(list)
   order = order || []
   list.sort(function(a, b) {
-    var ra = rank(order, a)
-    var rb = rank(order, b)
+    var ra = rank(order, a, shared)
+    var rb = rank(order, b, shared)
     if (ra !== -1 && rb !== -1) return ra - rb
     if (ra !== -1 || rb !== -1) return ra !== -1 ? -1 : 1
     var dx = (Number(a.x) || 0) - (Number(b.x) || 0)
@@ -172,12 +196,21 @@ function dropIndex(tiles, from, offset) {
 
 // View model for the panel: arrangeable monitors sorted by current position.
 function tilesFromMonitors(monitors) {
-  var list = (monitors || []).filter(isArrangeable).map(function(monitor) {
+  var arrangeable = (monitors || []).filter(isArrangeable)
+  var shared = sharedDescriptions(arrangeable)
+  var labelCount = {}
+  arrangeable.forEach(function(monitor) {
+    var label = tileLabel(monitor)
+    labelCount[label] = (labelCount[label] || 0) + 1
+  })
+  var list = arrangeable.map(function(monitor) {
     var size = logicalSize(monitor)
+    var label = tileLabel(monitor)
     return {
       name: String(monitor.name),
-      key: monitorKey(monitor),
-      label: tileLabel(monitor),
+      key: monitorKey(monitor, shared),
+      // Identical models get their port appended: "P2419H · DP-1".
+      label: labelCount[label] > 1 ? label + " · " + monitor.name : label,
       internal: isInternal(monitor),
       focused: monitor.focused === true,
       x: Number(monitor.x) || 0,
@@ -192,6 +225,7 @@ function tilesFromMonitors(monitors) {
 if (typeof module !== "undefined") {
   module.exports = {
     monitorKey: monitorKey,
+    sharedDescriptions: sharedDescriptions,
     isInternal: isInternal,
     isArrangeable: isArrangeable,
     logicalSize: logicalSize,
