@@ -115,7 +115,7 @@ function parseLayout(text) {
     if (Object.keys(cleaned).length > 0) monitors[key] = cleaned
   }
 
-  return { order: order, monitors: monitors }
+  return { order: order, monitors: monitors, withExternal: cleanExternalMode(data && data.withExternal) }
 }
 
 function parseOrder(text) {
@@ -129,6 +129,8 @@ function serializeLayout(layout) {
   var monitors = (layout && layout.monitors) || {}
   var data = { order: order }
   if (Object.keys(monitors).length > 0) data.monitors = monitors
+  var mode = cleanExternalMode(layout && layout.withExternal)
+  if (mode !== "extend") data.withExternal = mode
   return JSON.stringify(data, null, 2) + "\n"
 }
 
@@ -162,7 +164,84 @@ function withMonitorSettings(layout, key, settings) {
   if (Object.keys(cleaned).length > 0) monitors[key] = cleaned
   else delete monitors[key]
 
-  return { order: ((layout && layout.order) || []).slice(), monitors: monitors }
+  return {
+    order: ((layout && layout.order) || []).slice(),
+    monitors: monitors,
+    withExternal: cleanExternalMode(layout && layout.withExternal)
+  }
+}
+
+// What the laptop screen does while an external display is connected, like
+// Windows' Win+P: "extend" (both in use, the default), "external-only" (the
+// laptop screen is turned off) or "mirror" (the external shows the laptop
+// screen).
+var EXTERNAL_MODES = ["extend", "external-only", "mirror"]
+
+function cleanExternalMode(mode) {
+  return EXTERNAL_MODES.indexOf(mode) === -1 ? "extend" : mode
+}
+
+// New layout with `order` replaced (merged with the remembered order, see
+// mergeOrder) and everything else kept.
+function withOrder(layout, keys) {
+  return {
+    order: mergeOrder(keys, (layout && layout.order) || []),
+    monitors: (layout && layout.monitors) || {},
+    withExternal: cleanExternalMode(layout && layout.withExternal)
+  }
+}
+
+function withExternalMode(layout, mode) {
+  return {
+    order: ((layout && layout.order) || []).slice(),
+    monitors: (layout && layout.monitors) || {},
+    withExternal: cleanExternalMode(mode)
+  }
+}
+
+// The next Omarchy command that brings `monitors` (`hyprctl monitors all -j`)
+// in line with `mode`, or null when nothing has to change. One step at a
+// time: each command reloads the config, which brings the service back here
+// for the next one (external-only while mirroring first ends the mirror).
+// Only acts while a laptop screen and an enabled external display are both
+// connected; Omarchy itself turns the laptop screen back on and ends
+// mirroring when the last external display goes away. "extend" never acts on
+// its own, so a laptop screen turned off by other means stays off.
+function externalModeCommand(monitors, mode) {
+  var list = monitors || []
+  var internal = null
+  var externals = []
+  for (var i = 0; i < list.length; i++) {
+    if (isInternal(list[i])) {
+      if (!internal) internal = list[i]
+    } else if (!list[i].disabled) {
+      externals.push(list[i])
+    }
+  }
+  if (!internal || externals.length === 0) return null
+
+  // hyprctl reports the mirrored output by id ("0"); accept its name too.
+  var mirrored = externals.some(function(monitor) {
+    var of = String(monitor.mirrorOf)
+    return of === String(internal.name) || (internal.id !== undefined && of === String(internal.id))
+  })
+  if (mode === "external-only" && mirrored)
+    return ["omarchy-hyprland-monitor-internal-mirror", "off"]
+  if (mode === "external-only" && !internal.disabled)
+    return ["omarchy-hyprland-monitor-internal", "off"]
+  if (mode === "mirror" && !mirrored)
+    return ["omarchy-hyprland-monitor-internal-mirror", "on"]
+  return null
+}
+
+// Commands that undo "external-only" and "mirror" when switching back to
+// "extend", which the service leaves alone. Both are no-ops when their state
+// is not set.
+function extendCommands() {
+  return [
+    ["omarchy-hyprland-monitor-internal-mirror", "off"],
+    ["omarchy-hyprland-monitor-internal", "on"]
+  ]
 }
 
 // Parses "3440x1440@99.98Hz", "3440x1440@99.98" or "1920x1080" (refresh 0
@@ -528,6 +607,11 @@ if (typeof module !== "undefined") {
     liveSettings: liveSettings,
     settingsMatch: settingsMatch,
     rejectedFields: rejectedFields,
+    cleanExternalMode: cleanExternalMode,
+    withOrder: withOrder,
+    withExternalMode: withExternalMode,
+    externalModeCommand: externalModeCommand,
+    extendCommands: extendCommands,
     settingsRule: settingsRule,
     pendingSettings: pendingSettings,
     settingsToLua: settingsToLua,

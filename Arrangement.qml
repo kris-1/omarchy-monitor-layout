@@ -40,8 +40,9 @@ Column {
 
   // [{ name, key, label, internal, focused, x, w, h }], left to right.
   property var tiles: []
-  // Raw `hyprctl monitors -j` output behind the tiles.
+  // Raw `hyprctl monitors all -j` output behind the tiles.
   property var monitors: []
+  readonly property bool hasInternal: monitors.some(function(monitor) { return LayoutModel.isInternal(monitor) })
   // Outputs showing their Identify badge (see identify()).
   property var identifyOutputs: []
   // Output shown in the properties window ("" = closed).
@@ -87,6 +88,16 @@ Column {
       return
     }
     grabbedIndex = grabbedIndex >= 0 ? -1 : selectedIndex
+  }
+
+  // Extend / External only / Mirror for the laptop screen while an external
+  // display is connected. The mode is saved first; Service.qml carries out
+  // external-only and mirror step by step. It never acts in "extend", so
+  // switching back undoes both here.
+  function setExternalMode(mode) {
+    if (mode === orderFile.layout.withExternal) return
+    orderFile.saveExternalMode(mode)
+    if (mode === "extend" && !modeReset.running) modeReset.running = true
   }
 
   // Identify: number every display on its screen for a few seconds.
@@ -145,7 +156,8 @@ Column {
 
   Process {
     id: monitorsProc
-    command: ["hyprctl", "monitors", "-j"]
+    // "all" so a laptop screen turned off in external-only mode is still known.
+    command: ["hyprctl", "monitors", "all", "-j"]
     stdout: StdioCollector {
       waitForEnd: true
       onStreamFinished: {
@@ -171,9 +183,15 @@ Column {
     onLoadFailed: layout = { order: [], monitors: {} }
 
     function save(keys) {
-      layout = { order: LayoutModel.mergeOrder(keys, layout.order), monitors: layout.monitors }
+      layout = LayoutModel.withOrder(layout, keys)
       setText(LayoutModel.serializeLayout(layout))
       applier.apply()
+    }
+
+    // Service.qml sees the change and carries the mode out.
+    function saveExternalMode(mode) {
+      layout = LayoutModel.withExternalMode(layout, mode)
+      setText(LayoutModel.serializeLayout(layout))
     }
 
     // Already live (tried in the properties window), so only saved here.
@@ -393,6 +411,51 @@ Column {
     }
   }
 
+  // Laptop screen while an external display is connected, like Win+P.
+  Column {
+    visible: root.hasInternal
+    width: parent.width
+    spacing: Style.space(10)
+    topPadding: Style.space(4)
+
+    PanelSectionHeader {
+      text: "WITH AN EXTERNAL DISPLAY"
+      foreground: root.bar.foreground
+      fontFamily: root.bar.fontFamily
+    }
+
+    Grid {
+      id: modeRow
+      width: parent.width
+      columns: 3
+      spacing: Style.spacing.xs
+
+      readonly property real cellWidth: (width - spacing * (columns - 1)) / columns
+
+      Repeater {
+        model: [
+          { value: "extend", label: "Extend" },
+          { value: "external-only", label: "External only" },
+          { value: "mirror", label: "Mirror" }
+        ]
+
+        Button {
+          required property var modelData
+          width: modeRow.cellWidth
+          text: modelData.label
+          fontSize: Style.font.caption
+          foreground: root.bar.foreground
+          fontFamily: root.bar.fontFamily
+          horizontalPadding: Style.spacing.sm
+          verticalPadding: Style.spacing.controlPaddingY
+          bordered: true
+          active: orderFile.layout.withExternal === modelData.value
+          onClicked: root.setExternalMode(modelData.value)
+        }
+      }
+    }
+  }
+
   // Numbers the displays on their screens: all of them for a moment after
   // Identify, and the one whose settings window is open.
   IdentifyOverlay {
@@ -407,6 +470,17 @@ Column {
       }
       return root.active ? list : []
     }
+  }
+
+  Process {
+    id: modeReset
+    command: {
+      var steps = LayoutModel.extendCommands()
+      return ["bash", "-c", "\"$1\" \"$2\"; \"$3\" \"$4\"", "_"]
+        .concat(steps[0]).concat(steps[1])
+    }
+    stdout: StdioCollector { waitForEnd: true }
+    onRunningChanged: if (!running) root.refresh()
   }
 
   Timer {

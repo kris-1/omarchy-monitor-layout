@@ -214,9 +214,9 @@ test("cleanSettings drops invalid fields and garbage", () => {
 })
 
 test("parseLayout tolerates invalid JSON and drops invalid monitor fields", () => {
-  assert.deepEqual(Model.parseLayout(""), { order: [], monitors: {} })
-  assert.deepEqual(Model.parseLayout("not json"), { order: [], monitors: {} })
-  assert.deepEqual(Model.parseLayout('{"order": ["a"], "monitors": "nope"}'), { order: ["a"], monitors: {} })
+  assert.deepEqual(Model.parseLayout(""), { order: [], monitors: {}, withExternal: "extend" })
+  assert.deepEqual(Model.parseLayout("not json"), { order: [], monitors: {}, withExternal: "extend" })
+  assert.deepEqual(Model.parseLayout('{"order": ["a"], "monitors": "nope"}'), { order: ["a"], monitors: {}, withExternal: "extend" })
   const parsed = Model.parseLayout(JSON.stringify({
     order: ["a", "b"],
     monitors: {
@@ -224,7 +224,7 @@ test("parseLayout tolerates invalid JSON and drops invalid monitor fields", () =
       b: { scale: -5 } // cleans to {} entirely
     }
   }))
-  assert.deepEqual(parsed, { order: ["a", "b"], monitors: { a: { mode: "3440x1440@99.98", scale: 5 } } })
+  assert.deepEqual(parsed, { order: ["a", "b"], monitors: { a: { mode: "3440x1440@99.98", scale: 5 } }, withExternal: "extend" })
 })
 
 test("serializeOrder output is unchanged", () => {
@@ -234,7 +234,7 @@ test("serializeOrder output is unchanged", () => {
 
 test("serializeLayout omits monitors when empty and round-trips otherwise", () => {
   assert.equal(Model.serializeLayout({ order: ["a"], monitors: {} }), Model.serializeOrder(["a"]))
-  const layout = { order: ["a"], monitors: { a: { scale: 1.25 } } }
+  const layout = { order: ["a"], monitors: { a: { scale: 1.25 } }, withExternal: "mirror" }
   assert.deepEqual(Model.parseLayout(Model.serializeLayout(layout)), layout)
 })
 
@@ -383,4 +383,38 @@ test("rejectedFields names the settings the display did not take", () => {
   assert.deepEqual(Model.rejectedFields(monitor, { mode: "2560x1080@60", scale: 1.25, vrr: 1 }), ["mode", "scale", "vrr"])
   assert.deepEqual(Model.rejectedFields(monitor, { transform: 0, vrr: 2 }), [])
   assert.deepEqual(Model.rejectedFields(monitor, null), [])
+})
+
+test("withExternal round-trips and defaults to extend", () => {
+  assert.equal(Model.parseLayout('{"order":[]}').withExternal, "extend")
+  assert.equal(Model.parseLayout('{"order":[],"withExternal":"bogus"}').withExternal, "extend")
+  const layout = Model.parseLayout('{"order":["a"],"withExternal":"external-only"}')
+  assert.equal(layout.withExternal, "external-only")
+  assert.match(Model.serializeLayout(layout), /"withExternal": "external-only"/)
+  assert.doesNotMatch(Model.serializeLayout(Model.withExternalMode(layout, "extend")), /withExternal/)
+  assert.equal(Model.withOrder(layout, ["b"]).withExternal, "external-only")
+  assert.deepEqual(Model.withOrder(layout, ["b"]).order, ["b", "a"])
+  assert.equal(Model.withMonitorSettings(layout, "a", { scale: 2 }).withExternal, "external-only")
+})
+
+test("externalModeCommand acts only with a laptop screen and an external display", () => {
+  const internal = { name: "eDP-1", disabled: false, mirrorOf: "none" }
+  const external = { name: "HDMI-A-1", disabled: false, mirrorOf: "none" }
+  const off = ["omarchy-hyprland-monitor-internal", "off"]
+  const mirror = ["omarchy-hyprland-monitor-internal-mirror", "on"]
+
+  assert.deepEqual(Model.externalModeCommand([internal, external], "external-only"), off)
+  assert.equal(Model.externalModeCommand([{ ...internal, disabled: true }, external], "external-only"), null)
+  assert.deepEqual(Model.externalModeCommand([internal, external], "mirror"), mirror)
+  assert.equal(Model.externalModeCommand([internal, { ...external, mirrorOf: "eDP-1" }], "mirror"), null)
+  // hyprctl names the mirrored output by id.
+  const mirroring = [{ ...internal, id: 0 }, { ...external, mirrorOf: "0" }]
+  assert.equal(Model.externalModeCommand(mirroring, "mirror"), null)
+  // external-only while mirroring ends the mirror first.
+  assert.deepEqual(Model.externalModeCommand(mirroring, "external-only"), ["omarchy-hyprland-monitor-internal-mirror", "off"])
+  assert.equal(Model.externalModeCommand([internal, external], "extend"), null)
+  // Nothing to do without an external display, or on a desktop.
+  assert.equal(Model.externalModeCommand([internal], "external-only"), null)
+  assert.equal(Model.externalModeCommand([internal, { ...external, disabled: true }], "mirror"), null)
+  assert.equal(Model.externalModeCommand([external], "external-only"), null)
 })

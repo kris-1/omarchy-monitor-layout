@@ -13,6 +13,10 @@ QtObject {
   id: root
 
   required property string orderPath
+  // Also carry out the saved laptop-screen mode (withExternal) through
+  // Omarchy's commands. Only the service does, so the panel's applier cannot
+  // run them a second time in parallel.
+  property bool manageExternalMode: false
 
   // Emitted after each pass, whether or not anything had to move.
   signal applied()
@@ -28,7 +32,7 @@ QtObject {
   // positionsOnly: leave monitor settings alone, e.g. while a change made in
   // the properties window waits to be kept or reverted.
   function apply(positionsOnly) {
-    if (readProc.running || evalProc.running) {
+    if (readProc.running || evalProc.running || modeProc.running) {
       _pending = true
       _pendingSettings = _pendingSettings || !positionsOnly
       return
@@ -46,7 +50,7 @@ QtObject {
 
   // Order file and monitor list in one process, split by an ASCII record separator.
   property Process readProc: Process {
-    command: ["bash", "-c", "cat -- \"$1\" 2>/dev/null; printf '\\036'; hyprctl monitors -j", "_", root.orderPath]
+    command: ["bash", "-c", "cat -- \"$1\" 2>/dev/null; printf '\\036'; hyprctl monitors all -j", "_", root.orderPath]
     stdout: StdioCollector {
       waitForEnd: true
       onStreamFinished: {
@@ -54,6 +58,17 @@ QtObject {
         var layout = LayoutModel.parseLayout(parts[0])
         var monitors = []
         try { monitors = JSON.parse(parts[1] || "[]") } catch (e) { monitors = [] }
+
+        // The laptop-screen mode goes first: Omarchy's command reloads the
+        // config, and the reload brings the service back here.
+        var modeCommand = root.manageExternalMode && !root._settingsTried
+          ? LayoutModel.externalModeCommand(monitors, layout.withExternal) : null
+        if (modeCommand) {
+          root._settingsTried = true
+          root.modeProc.command = modeCommand
+          root.modeProc.running = true
+          return
+        }
 
         // Settings change logical sizes, so positions are computed from a
         // fresh read once they have been restored.
@@ -67,7 +82,12 @@ QtObject {
         }
 
         var positions = LayoutModel.computePositions(monitors, layout.order)
-        var parked = LayoutModel.parkedOutputs(root._knownOutputs, positions)
+        // Only unplugged outputs are parked; a connected but disabled one (the
+        // laptop screen in external-only mode) is left alone.
+        var connected = monitors.map(function(monitor) { return String(monitor.name) })
+        var parked = LayoutModel.parkedOutputs(root._knownOutputs, positions).filter(function(name) {
+          return connected.indexOf(name) === -1
+        })
         var known = parked.slice()
         positions.forEach(function(p) { known.push(p.name) })
         root._knownOutputs = known
@@ -82,6 +102,11 @@ QtObject {
         root.evalProc.running = true
       }
     }
+  }
+
+  property Process modeProc: Process {
+    stdout: StdioCollector { waitForEnd: true }
+    onRunningChanged: if (!running) root._finish()
   }
 
   property Process evalProc: Process {

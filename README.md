@@ -42,6 +42,10 @@ sits to the right of your laptop but the pointer has to leave through the
   within 30 seconds the display goes back to its previous settings, so a mode
   it cannot show never sticks. Kept settings are remembered per display and restored after
   reconnects and reloads.
+- **Laptop screen with an external display.** Extend, External only or
+  Mirror, like Win+P: with External only the laptop screen turns off
+  whenever an external display is connected and comes back when it is
+  unplugged.
 - **Identify.** Shows a large number and name in the corner of every screen,
   matching the numbers on the tiles; the display being edited keeps its
   badge while its settings window is open.
@@ -56,6 +60,9 @@ sits to the right of your laptop but the pointer has to leave through the
 - Hyprland with the Lua config (0.56 or newer): positions are applied with
   `hyprctl eval`, which the legacy config parser does not support.
 - `hyprctl` and `bash`, both already present on Omarchy.
+- Omarchy's `omarchy-hyprland-monitor-internal` and
+  `omarchy-hyprland-monitor-internal-mirror` commands, for External only and
+  Mirror (shipped with Omarchy).
 
 It needs no extra packages, no elevated privileges, no system services and no
 network access. The plugin runs inside `omarchy-shell` like any other shell
@@ -91,6 +98,9 @@ omarchy plugin update monitor-layout
    previous settings come back. `j`/`k`/`h`/`l` and `Enter` work here too;
    `Esc` closes the window.
 5. Not sure which tile is which screen? Press **Identify** under the preview.
+6. On a laptop, choose what the laptop screen does while an external display
+   is connected: **Extend**, **External only** or **Mirror** under
+   WITH AN EXTERNAL DISPLAY.
 
 The layout and kept settings survive reconnecting a display, docking and
 reloading Hyprland.
@@ -175,6 +185,12 @@ The layout lives in `~/.config/omarchy/monitor-layout.json`:
 `mode` (`WIDTHxHEIGHT@HZ`), `scale`, `transform` (0–3 rotate by 0°, 90°,
 180°, 270°) and `vrr` (0 off, 1 on, 2 fullscreen only). Every field is
 optional.
+
+`withExternal` is `external-only` or `mirror` when chosen under WITH AN
+EXTERNAL DISPLAY (absent means `extend`). The service carries it out with
+Omarchy's `omarchy-hyprland-monitor-internal off` and
+`omarchy-hyprland-monitor-internal-mirror on`, the same commands as Omarchy's
+own laptop-display toggles.
 
 Entries may be monitor descriptions or output names (`eDP-1`, `HDMI-A-1`).
 Displays that are not listed are placed to the right, in their current order.

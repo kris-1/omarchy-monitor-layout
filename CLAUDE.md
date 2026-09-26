@@ -26,7 +26,7 @@ for Hyprland, and nothing else. See README.md for the user-facing description.
 - The long-term goal is an upstream merge of `Arrangement.qml` into Omarchy's
   Display widget. Keep it self-contained, with `bar`, `active`, `focused`,
   `cursorActive`, `panel`, `moveCursor()`, `activate()`, `showProperties()`,
-  `identify()`, `forgetSetting()` and `focusRequested` as its API.
+  `identify()`, `setExternalMode()`, `forgetSetting()` and `focusRequested` as its API.
 - Never edit `/usr/share/omarchy/`; read it for reference only.
 - The plugin must pass `omarchy plugin validate`: no symlinks, relative entry
   points, id outside the reserved `omarchy.*` namespace.

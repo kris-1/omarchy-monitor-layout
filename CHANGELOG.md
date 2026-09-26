@@ -17,11 +17,20 @@ All notable changes to this project are documented here. The format follows
   Hyprland refused or replaced (for example adaptive sync on a display
   without it, or a scale it rounded) is reverted at once with a message,
   instead of asking to keep it.
+- WITH AN EXTERNAL DISPLAY on laptops: **Extend**, **External only** (the
+  laptop screen turns off while an external display is connected) or
+  **Mirror**, like Windows' Win+P. The choice is saved (`withExternal`) and
+  carried out by the service on every connect through Omarchy's own
+  `omarchy-hyprland-monitor-internal` and `-internal-mirror` commands;
+  Omarchy turns the laptop screen back on when the last external display is
+  unplugged.
 
 ### Changed
 
 - `preview.png` shows the settings window next to the panel.
 - The DISPLAY SETTINGS hint moved below the preview, next to Identify.
+- The layout is read from `hyprctl monitors all -j`, and a connected but
+  disabled output (the laptop screen in External only) is no longer parked.
 
 ## [0.5.1] - 2026-09-26
 

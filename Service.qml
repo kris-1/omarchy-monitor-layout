@@ -3,10 +3,11 @@ import Quickshell
 import Quickshell.Hyprland
 import Quickshell.Io
 
-// Keeps monitors in the saved left-to-right order. Re-applies the layout when a
-// monitor is plugged in or removed, when Hyprland reloads its config (which
-// resets positions to the ones in monitors.lua), and when the order file
-// changes on disk.
+// Keeps monitors in the saved left-to-right order, with their kept settings,
+// and carries out the saved laptop-screen mode (extend, external only,
+// mirror). Re-applies all of it when a monitor is plugged in or removed, when
+// Hyprland reloads its config (which resets positions to the ones in
+// monitors.lua), and when the order file changes on disk.
 Item {
   id: root
 
@@ -19,6 +20,7 @@ Item {
   LayoutApplier {
     id: applier
     orderPath: root.orderPath
+    manageExternalMode: true
   }
 
   // Hotplug arrives as a burst (a dock brings several outputs at once, a
