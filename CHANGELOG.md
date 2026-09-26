@@ -6,6 +6,16 @@ All notable changes to this project are documented here. The format follows
 
 ## [Unreleased]
 
+## [0.3.1] - 2026-09-26
+
+### Changed
+
+- Prepared for the Omarchy plugin marketplace: `preview.png` in the
+  repository root, `license` in the manifest, README with Install, Usage,
+  Configure and Remove sections and a list of dependencies.
+- `scripts/check.sh` runs `qmllint` when available.
+- The upstream proposal links to `omacom/omarchy`.
+
 ## [0.3.0] - 2026-09-26
 
 ### Changed

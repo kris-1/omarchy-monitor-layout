@@ -24,7 +24,8 @@ for Hyprland, and nothing else. See README.md for the user-facing description.
 
 ## Workflow
 
-- `scripts/check.sh` — unit tests and manifest validation (what CI runs).
+- `scripts/check.sh` — unit tests, manifest validation and `qmllint` (CI runs
+  the first two; qmllint needs a local Omarchy install).
 - `scripts/dev-install.sh [--enable]` — copy into
   `~/.config/omarchy/plugins/monitor-layout/` and restart the shell.
   A restart is required: plugin hot-reload can serve stale QML.
@@ -37,3 +38,14 @@ for Hyprland, and nothing else. See README.md for the user-facing description.
   into the existing rule: mode and scale are kept.
 - `hyprctl reload` re-applies positions from `monitors.lua`; the service
   listens for `configreloaded` and restores the saved layout.
+
+## Publishing
+
+- Listed through the Omarchy plugin marketplace
+  (https://plugins.omarchy.org/publish.html): an issue in
+  `omacom/omarchy-plugin-marketplace`. Its requirements: `manifest.json`,
+  README (Install/Usage/Configure/Remove, dependencies), LICENSE and an
+  optional `preview.png`, all in the repository root.
+- The marketplace runs a static security scan: never add install scripts,
+  `sudo`/`pkexec`, `systemctl`, binaries or `curl | sh`.
+- The plugin id `monitor-layout` is permanent once listed.

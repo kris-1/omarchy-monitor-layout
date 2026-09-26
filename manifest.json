@@ -2,8 +2,9 @@
   "schemaVersion": 1,
   "id": "monitor-layout",
   "name": "Monitor Layout",
-  "version": "0.3.0",
+  "version": "0.3.1",
   "author": "Krzysztof Golab Magalhaes",
+  "license": "MIT",
   "description": "Drag-and-drop monitor arrangement that survives hotplug and config reloads",
   "kinds": [
     "service",

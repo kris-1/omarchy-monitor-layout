@@ -21,7 +21,7 @@ fi
 
 mkdir -p "$TARGET"
 rsync -a --delete \
-  --exclude '.git/' --exclude '.github/' --exclude 'tests/' --exclude 'scripts/' --exclude 'docs/' \
+  --exclude '.git/' --exclude '.github/' --exclude 'tests/' --exclude 'scripts/' \
   "$ROOT/" "$TARGET/"
 echo "Installed $ID into $TARGET"
 

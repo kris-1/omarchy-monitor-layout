@@ -1,5 +1,4 @@
 import QtQuick
-import Quickshell
 import Quickshell.Io
 import "LayoutModel.js" as LayoutModel
 
@@ -50,8 +49,8 @@ QtObject {
           return
         }
         var staging = LayoutModel.stagingX(monitors, positions)
-        evalProc.command = ["hyprctl", "eval", LayoutModel.positionsToLua(positions, staging)]
-        evalProc.running = true
+        root.evalProc.command = ["hyprctl", "eval", LayoutModel.positionsToLua(positions, staging)]
+        root.evalProc.running = true
       }
     }
   }
