@@ -23,7 +23,9 @@ sits to the right of your laptop but the pointer has to leave through the
   (`SUPER + CTRL + D`) opens it; disabling it brings the built-in one back.
 - **Drag-and-drop arrangement**, with tiles scaled to each display's logical
   size (resolution ÷ scale, rotation aware).
-- **Any number of displays**, in a single left-to-right row.
+- **Any number of displays**, left to right, and **above or below** one
+  another: drag a tile onto the top or bottom part of another to stack it
+  there.
 - **Sticks across reconnects and reloads.** A background service re-applies the
   layout when a display is plugged in or removed and after every Hyprland
   config reload.
@@ -50,8 +52,8 @@ sits to the right of your laptop but the pointer has to leave through the
   matching the numbers on the tiles; the display being edited keeps its
   badge while its settings window is open.
 - **Keyboard friendly.** In the DISPLAY SETTINGS section `h`/`l` choose a display,
-  `Enter` picks it up, `h`/`l` move it, `Enter` drops it, `I` opens its
-  properties.
+  `Enter` picks it up, `h`/`l` move it, `k`/`j` put it above or below,
+  `Enter` drops it, `I` opens its properties.
 
 ## Requirements and dependencies
 
@@ -87,11 +89,14 @@ omarchy plugin update monitor-layout
 1. Open the Display widget: click its icon on the bar or press
    `SUPER + CTRL + D`.
 2. In the DISPLAY SETTINGS section, drag a display tile to the left or right of the
-   others, the way the screens stand on your desk, and release it. The new
-   layout applies immediately.
+   others, the way the screens stand on your desk, and release it. To put a
+   display above or below another, drag it onto that tile's top or bottom
+   part; an accent bar shows the edge it will land on. The new layout
+   applies immediately.
 3. Or use the keyboard: `j`/`k` move to the DISPLAY SETTINGS section, `h`/`l`
-   choose a display, `Enter` picks it up, `h`/`l` move it, `Enter` drops it,
-   `Esc` closes the panel.
+   choose a display, `Enter` picks it up, `h`/`l` move it along the row,
+   `k`/`j` put it above or below its neighbour, `Enter` drops it, `Esc`
+   closes the panel.
 4. Double-click a display tile (or press `I` on it) to open its properties.
    Pick a resolution, refresh rate, scale, rotation or adaptive sync mode and
    press **Apply**. Confirm with **Keep changes** within 30 seconds, or the
@@ -186,6 +191,9 @@ The layout lives in `~/.config/omarchy/monitor-layout.json`:
 180°, 270°) and `vrr` (0 off, 1 on, 2 fullscreen only). Every field is
 optional.
 
+`stack` lists displays standing above or below another one, centered on
+it: `{ "<display>": { "on": "<display below or above>", "side": "above" } }`.
+
 `withExternal` is `external-only` or `mirror` when chosen under WITH AN
 EXTERNAL DISPLAY (absent means `extend`). The service carries it out with
 Omarchy's `omarchy-hyprland-monitor-internal off` and
@@ -196,13 +204,15 @@ Entries may be monitor descriptions or output names (`eDP-1`, `HDMI-A-1`).
 Displays that are not listed are placed to the right, in their current order.
 Displays that are listed but unplugged are remembered for next time.
 
-Positions are computed left to right from `0x0`, top-aligned, with no gaps,
-using each display's logical width. Disabled and mirrored outputs are skipped.
+Positions are computed left to right, top-aligned, with no gaps, using each
+display's logical size; stacked displays are centered above or below theirs,
+and the whole layout is shifted to start at `0x0`. Disabled and mirrored
+outputs are skipped.
 
 ## Limitations
 
-- One horizontal row only: stacking a display above or below another is not
-  supported yet, and any vertical offset is reset to `0`.
+- A display above or below another is always centered on it; other
+  offsets are not supported yet.
 - After a Hyprland config reload the positions from `monitors.lua` apply for a
   moment (about 300 ms) before the service restores the saved layout.
 - `Panel.qml` is a copy of Omarchy's Display widget; it is kept in sync with

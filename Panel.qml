@@ -514,7 +514,10 @@ Panel {
       anchors.fill: parent
       onMoveRequested: function(dx, dy) {
         if (!root.cursorActive) { root.cursorActive = true; return }
-        if (dy !== 0) root.moveCursor(dy)
+        // arrangement: j/k move a picked-up display above or below.
+        if (dy !== 0 && root.focusSection === "arrangement" && arrangement.grabbedIndex >= 0)
+          arrangement.moveGrabbedVertically(dy)
+        else if (dy !== 0) root.moveCursor(dy)
         else if (dx !== 0) {
           if (root.focusSection === "brightness") root.adjustBrightness(dx * 5)
           else if (root.focusSection === "textsize") root.adjustTextSize(dx)

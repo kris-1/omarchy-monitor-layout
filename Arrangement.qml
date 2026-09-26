@@ -58,7 +58,13 @@ Column {
 
   // Keyboard cursor over the tiles, and the tile picked up with Enter (-1 = none).
   property int selectedIndex: 0
-  property int grabbedIndex: -1
+  // The picked-up tile, by key so it survives the tiles being re-read.
+  property string grabbedKey: ""
+  readonly property int grabbedIndex: {
+    for (var i = 0; i < tiles.length; i++)
+      if (grabbedKey !== "" && tiles[i].key === grabbedKey) return i
+    return -1
+  }
 
   // Hover asks the host panel to move its keyboard focus here.
   signal focusRequested()
@@ -67,16 +73,58 @@ Column {
     if (!monitorsProc.running) monitorsProc.running = true
   }
 
-  // h/l: move the cursor, or the picked-up tile.
+  // h/l: move the cursor, or the picked-up tile along the row.
   function moveCursor(dx) {
     if (!reorderable) return
-    var to = Math.max(0, Math.min(tiles.length - 1, selectedIndex + dx))
     if (grabbedIndex >= 0) {
-      if (to === grabbedIndex) return
-      moveTile(grabbedIndex, to)
-      grabbedIndex = to
+      var tile = tiles[grabbedIndex]
+      var row = rowKeys()
+      var at = row.indexOf(tile.key)
+      // A stacked tile joins the row beside the monitor it stood on.
+      if (at === -1) at = row.indexOf(baseKey(tile.key)) + (dx > 0 ? 1 : 0)
+      else at = Math.max(0, Math.min(row.length - 1, at + dx))
+      saveLayout(LayoutModel.withRowPosition(orderFile.layout, tile.key, row, at))
+      return
     }
-    selectedIndex = to
+    selectedIndex = Math.max(0, Math.min(tiles.length - 1, selectedIndex + dx))
+  }
+
+  // j/k while a tile is picked up: stack it below/above its row neighbour, or
+  // take a stacked tile back into the row.
+  function moveGrabbedVertically(dy) {
+    if (grabbedIndex < 0) return
+    var tile = tiles[grabbedIndex]
+    var side = dy < 0 ? "above" : "below"
+    var entry = LayoutModel.activeStack(monitors, orderFile.layout.stack)[tile.key]
+    if (entry) {
+      // Moving back towards the monitor it stands on returns it to the row.
+      if (entry.side !== side) {
+        var row = rowKeys()
+        saveLayout(LayoutModel.withRowPosition(orderFile.layout, tile.key, row,
+          row.indexOf(baseKey(tile.key)) + 1))
+      }
+      return
+    }
+    var others = rowKeys().filter(function(key) { return key !== tile.key })
+    if (others.length === 0) return
+    var at = rowKeys().indexOf(tile.key)
+    var neighbour = others[Math.max(0, Math.min(others.length - 1, at - 1))]
+    saveLayout(LayoutModel.withStacked(orderFile.layout, tile.key, neighbour, side))
+  }
+
+  // Keys of the row monitors, left to right.
+  function rowKeys() {
+    return tiles.filter(function(tile) { return !tile.stacked })
+      .sort(function(a, b) { return a.x - b.x })
+      .map(function(tile) { return tile.key })
+  }
+
+  // The row monitor a stacked one ultimately stands on.
+  function baseKey(key) {
+    var stack = LayoutModel.activeStack(monitors, orderFile.layout.stack)
+    var guard = 0
+    while (stack[key] && guard++ < 64) key = stack[key].on
+    return key
   }
 
   // Enter: pick up / drop the tile under the cursor; with a single display,
@@ -87,7 +135,7 @@ Column {
       showProperties()
       return
     }
-    grabbedIndex = grabbedIndex >= 0 ? -1 : selectedIndex
+    grabbedKey = grabbedIndex >= 0 ? "" : tiles[selectedIndex].key
   }
 
   // Extend / External only / Mirror for the laptop screen while an external
@@ -95,8 +143,8 @@ Column {
   // external-only and mirror step by step. It never acts in "extend", so
   // switching back undoes both here.
   function setExternalMode(mode) {
-    if (mode === orderFile.layout.withExternal) return
-    orderFile.saveExternalMode(mode)
+    if (mode !== orderFile.layout.withExternal) orderFile.saveExternalMode(mode)
+    // Always, so Extend also brings back a laptop screen turned off elsewhere.
     if (mode === "extend" && !modeReset.running) modeReset.running = true
   }
 
@@ -126,17 +174,25 @@ Column {
     }
   }
 
-  // Move a tile, show the result immediately, then persist and apply it.
-  function moveTile(from, to) {
-    if (from === to || from < 0 || to < 0 || from >= tiles.length || to >= tiles.length) return
-    tiles = LayoutModel.moveItem(tiles, from, to)
-    orderFile.save(tiles.map(function(tile) { return tile.key }))
+  // Where a dragged tile was dropped (LayoutModel.dropTarget): persist and
+  // apply it; the tiles follow once the live layout has moved.
+  function dropTile(from, target) {
+    var tile = tiles[from]
+    if (!tile || !target) return
+    if (target.side === "row")
+      saveLayout(LayoutModel.withRowPosition(orderFile.layout, tile.key, rowKeys(), target.index))
+    else
+      saveLayout(LayoutModel.withStacked(orderFile.layout, tile.key, target.on, target.side))
+  }
+
+  function saveLayout(layout) {
+    orderFile.saveLayout(layout)
   }
 
   spacing: Style.space(10)
 
   onActiveChanged: {
-    grabbedIndex = -1
+    grabbedKey = ""
     if (!active) {
       propertiesOutput = ""
       identifyOutputs = []
@@ -146,11 +202,12 @@ Column {
       refresh()
     }
   }
-  onFocusedChanged: if (!focused) grabbedIndex = -1
+  onFocusedChanged: if (!focused) grabbedKey = ""
   onTilesChanged: {
     if (selectedIndex > tiles.length - 1) selectedIndex = Math.max(0, tiles.length - 1)
-    if (grabbedIndex > tiles.length - 1) grabbedIndex = -1
   }
+  // The cursor stays on the picked-up tile as it moves.
+  onGrabbedIndexChanged: if (grabbedIndex >= 0) selectedIndex = grabbedIndex
 
   Component.onCompleted: refresh()
 
@@ -164,7 +221,7 @@ Column {
         var monitors = []
         try { monitors = JSON.parse(String(text || "[]")) } catch (e) { monitors = [] }
         root.monitors = monitors
-        root.tiles = LayoutModel.tilesFromMonitors(monitors)
+        root.tiles = LayoutModel.tilesFromMonitors(monitors, orderFile.layout.stack)
       }
     }
   }
@@ -176,14 +233,18 @@ Column {
     path: root.orderPath
     atomicWrites: true
     printErrors: false
+    // The service and hand edits change the file too; stay in step so the
+    // buttons show, and later saves build on, what is really saved.
+    watchChanges: true
+    onFileChanged: reload()
 
     property var layout: ({ order: [], monitors: {} })
 
     onLoaded: layout = LayoutModel.parseLayout(text())
     onLoadFailed: layout = { order: [], monitors: {} }
 
-    function save(keys) {
-      layout = LayoutModel.withOrder(layout, keys)
+    function saveLayout(next) {
+      layout = next
       setText(LayoutModel.serializeLayout(layout))
       applier.apply()
     }
@@ -255,7 +316,8 @@ Column {
   CursorSurface {
     id: row
     width: parent.width
-    height: Style.space(110)
+    // Taller once a display stands above or below another.
+    height: canvas.stacked ? Style.space(170) : Style.space(110)
     hasCursor: root.cursorActive && root.focused
     foreground: root.bar.foreground
     outline: true
@@ -266,49 +328,64 @@ Column {
       anchors.margins: Style.space(10)
 
       readonly property var tiles: root.tiles
+      readonly property bool stacked: tiles.some(function(tile) { return tile.stacked })
+      // Gap drawn between touching displays.
       readonly property real gap: Style.space(6)
-      readonly property real totalW: {
-        var sum = 0
-        for (var i = 0; i < tiles.length; i++) sum += tiles[i].w
-        return sum
+      // Bounding box of the live layout, in logical pixels.
+      readonly property var bounds: {
+        var box = { left: Infinity, top: Infinity, right: -Infinity, bottom: -Infinity }
+        for (var i = 0; i < tiles.length; i++) {
+          box.left = Math.min(box.left, tiles[i].x)
+          box.top = Math.min(box.top, tiles[i].y)
+          box.right = Math.max(box.right, tiles[i].x + tiles[i].w)
+          box.bottom = Math.max(box.bottom, tiles[i].y + tiles[i].h)
+        }
+        return tiles.length ? box : { left: 0, top: 0, right: 0, bottom: 0 }
       }
-      readonly property real totalH: {
-        var max = 0
-        for (var i = 0; i < tiles.length; i++) max = Math.max(max, tiles[i].h)
-        return max
-      }
-      // Preview pixels per logical monitor pixel, fitting all tiles in one row.
-      readonly property real unit: totalW > 0 && totalH > 0
-        ? Math.min((width - gap * (tiles.length - 1)) / totalW, height / totalH)
+      // Preview pixels per logical monitor pixel, fitting the whole layout.
+      readonly property real unit: bounds.right > bounds.left && bounds.bottom > bounds.top
+        ? Math.min(width / (bounds.right - bounds.left), height / (bounds.bottom - bounds.top))
         : 0
-      readonly property real groupLeft: (width - (totalW * unit + gap * (tiles.length - 1))) / 2
-      readonly property real groupTop: (height - totalH * unit) / 2
+      readonly property real groupLeft: (width - (bounds.right - bounds.left) * unit) / 2
+      readonly property real groupTop: (height - (bounds.bottom - bounds.top) * unit) / 2
 
       // Tile being dragged (-1 = none) and by how much. Cleared on release,
       // so tiles always rest where the live layout puts them.
       property int dragIndex: -1
-      property real dragOffset: 0
+      property real dragX: 0
+      property real dragY: 0
 
-      function restX(index) {
-        var x = groupLeft
-        for (var i = 0; i < index && i < tiles.length; i++) x += tiles[i].w * unit + gap
-        return x
+      // Resting rectangle of a tile, inset by half the gap on each side.
+      function rest(index) {
+        var tile = tiles[index]
+        return {
+          key: tile.key,
+          stacked: tile.stacked,
+          left: groupLeft + (tile.x - bounds.left) * unit + gap / 2,
+          top: groupTop + (tile.y - bounds.top) * unit + gap / 2,
+          width: Math.max(1, tile.w * unit - gap),
+          height: Math.max(1, tile.h * unit - gap)
+        }
       }
 
-      function clampOffset(tileWidth, base, offset) {
-        return Math.max(-base, Math.min(width - tileWidth - base, offset))
+      function target(from, dx, dy) {
+        var rects = []
+        for (var i = 0; i < tiles.length; i++) rects.push(rest(i))
+        return LayoutModel.dropTarget(rects, from, dx, dy)
       }
+
+      // Where the tile being dragged would land, for the edge marker.
+      readonly property var dropPreview: dragIndex >= 0 ? target(dragIndex, dragX, dragY) : null
 
       function finishDrag() {
         var from = dragIndex
-        var offset = dragOffset
+        var dx = dragX
+        var dy = dragY
         dragIndex = -1
-        dragOffset = 0
-        if (from < 0) return
-        var rest = []
-        for (var i = 0; i < tiles.length; i++)
-          rest.push({ left: restX(i), width: tiles[i].w * unit })
-        root.moveTile(from, LayoutModel.dropIndex(rest, from, offset))
+        dragX = 0
+        dragY = 0
+        if (from < 0 || (Math.abs(dx) < 2 && Math.abs(dy) < 2)) return
+        root.dropTile(from, target(from, dx, dy))
       }
 
       Repeater {
@@ -319,20 +396,21 @@ Column {
           required property var modelData
           required property int index
 
-          readonly property real restX: canvas.restX(index)
+          readonly property var restRect: canvas.rest(index)
           readonly property bool dragged: canvas.dragIndex === index
 
-          x: restX + (dragged ? canvas.dragOffset : 0)
-          y: canvas.groupTop
+          x: restRect.left + (dragged ? canvas.dragX : 0)
+          y: restRect.top + (dragged ? canvas.dragY : 0)
           z: dragged ? 2 : 0
-          width: modelData.w * canvas.unit
-          height: modelData.h * canvas.unit
+          width: restRect.width
+          height: restRect.height
           icon: modelData.internal ? "󰌢" : "󰍹"
           label: modelData.label
           number: index + 1
           highlighted: modelData.focused
           grabbed: dragged || root.grabbedIndex === index
           hasCursor: root.cursorActive && root.focused && root.selectedIndex === index
+          dropSide: canvas.dropPreview && canvas.dropPreview.on === modelData.key ? canvas.dropPreview.side : ""
 
           MouseArea {
             anchors.fill: parent
@@ -343,7 +421,7 @@ Column {
             cursorShape: !root.reorderable ? Qt.PointingHandCursor
               : pressed ? Qt.ClosedHandCursor : Qt.OpenHandCursor
 
-            property real pressX: 0
+            property point pressAt: Qt.point(0, 0)
 
             onContainsMouseChanged: if (containsMouse && !pressed) {
               root.selectedIndex = screenTile.index
@@ -351,21 +429,30 @@ Column {
             }
             onPressed: function(mouse) {
               if (!root.reorderable) return
-              pressX = mapToItem(canvas, mouse.x, 0).x
-              root.grabbedIndex = -1
-              canvas.dragOffset = 0
+              pressAt = mapToItem(canvas, mouse.x, mouse.y)
+              root.grabbedKey = ""
+              canvas.dragX = 0
+              canvas.dragY = 0
               canvas.dragIndex = screenTile.index
             }
             onPositionChanged: function(mouse) {
-              if (!pressed) return
-              canvas.dragOffset = canvas.clampOffset(screenTile.width, screenTile.restX,
-                mapToItem(canvas, mouse.x, 0).x - pressX)
+              if (!pressed || canvas.dragIndex !== screenTile.index) return
+              var at = mapToItem(canvas, mouse.x, mouse.y)
+              var r = screenTile.restRect
+              // Keep the tile's center inside the preview. The tile itself may
+              // stick out, or a display that fills the preview's height could
+              // never reach the bottom or top edge of another to stack there.
+              canvas.dragX = Math.max(-r.left - r.width / 2,
+                Math.min(canvas.width - r.left - r.width / 2, at.x - pressAt.x))
+              canvas.dragY = Math.max(-r.top - r.height / 2,
+                Math.min(canvas.height - r.top - r.height / 2, at.y - pressAt.y))
             }
             onReleased: canvas.finishDrag()
             onDoubleClicked: root.propertiesOutput = screenTile.modelData.name
             onCanceled: {
               canvas.dragIndex = -1
-              canvas.dragOffset = 0
+              canvas.dragX = 0
+              canvas.dragY = 0
             }
           }
         }
@@ -380,7 +467,7 @@ Column {
     Text {
       id: hint
       textFormat: Text.PlainText
-      text: root.grabbedIndex >= 0 ? "H/L TO MOVE · ENTER TO DROP"
+      text: root.grabbedIndex >= 0 ? "H/J/K/L TO MOVE · ENTER TO DROP"
         : root.cursorActive && root.focused
           ? (root.reorderable ? "ENTER TO PICK UP · I FOR SETTINGS" : "ENTER FOR SETTINGS")
         : root.reorderable ? "DRAG · DOUBLE-CLICK FOR SETTINGS" : "DOUBLE-CLICK FOR SETTINGS"
@@ -497,6 +584,8 @@ Column {
     property string icon: ""
     property string label: ""
     property int number: 0
+    // "above" / "below": the dragged display would land on this edge.
+    property string dropSide: ""
     property bool highlighted: false
     property bool grabbed: false
     property bool hasCursor: false
@@ -508,6 +597,17 @@ Column {
     color: grabbed ? Style.selectedFillFor(root.bar.foreground, Color.accent) : faint
     border.width: hasCursor ? 2 : 1
     border.color: hasCursor ? root.bar.foreground : (highlighted ? Color.accent : line)
+
+    Rectangle {
+      visible: tile.dropSide !== ""
+      anchors.left: parent.left
+      anchors.right: parent.right
+      anchors.top: tile.dropSide === "above" ? parent.top : undefined
+      anchors.bottom: tile.dropSide === "below" ? parent.bottom : undefined
+      height: Math.max(2, Style.space(3))
+      radius: height / 2
+      color: Color.accent
+    }
 
     // Matches the number Identify shows on the screen.
     Text {

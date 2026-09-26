@@ -81,7 +81,7 @@ QtObject {
           return
         }
 
-        var positions = LayoutModel.computePositions(monitors, layout.order)
+        var positions = LayoutModel.computePositions(monitors, layout.order, layout.stack)
         // Only unplugged outputs are parked; a connected but disabled one (the
         // laptop screen in external-only mode) is left alone.
         var connected = monitors.map(function(monitor) { return String(monitor.name) })

@@ -1,6 +1,7 @@
 // Pure layout logic shared by Service.qml, Panel.qml and the Node tests.
 //
-// A layout is a left-to-right order of monitor keys. A key is the monitor's
+// A layout is a left-to-right order of monitor keys (the row), plus monitors
+// stacked above or below another one (`stack`), centered on it. A key is the monitor's
 // description (make, model and serial, stable across ports) or its output
 // name when the description is empty or shared by another connected monitor
 // (identical models that report no serial number). Monitors are placed in a single top-aligned row with
@@ -115,7 +116,12 @@ function parseLayout(text) {
     if (Object.keys(cleaned).length > 0) monitors[key] = cleaned
   }
 
-  return { order: order, monitors: monitors, withExternal: cleanExternalMode(data && data.withExternal) }
+  return {
+    order: order,
+    monitors: monitors,
+    withExternal: cleanExternalMode(data && data.withExternal),
+    stack: cleanStack(data && data.stack)
+  }
 }
 
 function parseOrder(text) {
@@ -131,6 +137,8 @@ function serializeLayout(layout) {
   if (Object.keys(monitors).length > 0) data.monitors = monitors
   var mode = cleanExternalMode(layout && layout.withExternal)
   if (mode !== "extend") data.withExternal = mode
+  var stack = cleanStack(layout && layout.stack)
+  if (Object.keys(stack).length > 0) data.stack = stack
   return JSON.stringify(data, null, 2) + "\n"
 }
 
@@ -164,11 +172,9 @@ function withMonitorSettings(layout, key, settings) {
   if (Object.keys(cleaned).length > 0) monitors[key] = cleaned
   else delete monitors[key]
 
-  return {
-    order: ((layout && layout.order) || []).slice(),
-    monitors: monitors,
-    withExternal: cleanExternalMode(layout && layout.withExternal)
-  }
+  var copy = copyLayout(layout)
+  copy.monitors = monitors
+  return copy
 }
 
 // What the laptop screen does while an external display is connected, like
@@ -184,19 +190,15 @@ function cleanExternalMode(mode) {
 // New layout with `order` replaced (merged with the remembered order, see
 // mergeOrder) and everything else kept.
 function withOrder(layout, keys) {
-  return {
-    order: mergeOrder(keys, (layout && layout.order) || []),
-    monitors: (layout && layout.monitors) || {},
-    withExternal: cleanExternalMode(layout && layout.withExternal)
-  }
+  var copy = copyLayout(layout)
+  copy.order = mergeOrder(keys, (layout && layout.order) || [])
+  return copy
 }
 
 function withExternalMode(layout, mode) {
-  return {
-    order: ((layout && layout.order) || []).slice(),
-    monitors: (layout && layout.monitors) || {},
-    withExternal: cleanExternalMode(mode)
-  }
+  var copy = copyLayout(layout)
+  copy.withExternal = cleanExternalMode(mode)
+  return copy
 }
 
 // The next Omarchy command that brings `monitors` (`hyprctl monitors all -j`)
@@ -461,22 +463,208 @@ function sortMonitors(monitors, order) {
   return list
 }
 
-// [{ name, x, y, changed }] for every arrangeable monitor, left to right.
-function computePositions(monitors, order) {
-  var sorted = sortMonitors(monitors, order)
-  var x = 0
-  var result = []
-  for (var i = 0; i < sorted.length; i++) {
-    var monitor = sorted[i]
-    result.push({
-      name: String(monitor.name),
-      x: x,
-      y: 0,
-      changed: (Number(monitor.x) || 0) !== x || (Number(monitor.y) || 0) !== 0
-    })
-    x += logicalSize(monitor).w
+// Stack entries that can be used with `monitors` connected: the monitor and
+// the one it stands on are both arrangeable, and following `on` never loops.
+// { key: { on, side } } keyed like the row (monitorKey).
+function activeStack(monitors, stack) {
+  var list = (monitors || []).filter(isArrangeable)
+  var shared = sharedDescriptions(list)
+  var present = {}
+  list.forEach(function(monitor) { present[monitorKey(monitor, shared)] = true })
+  var active = {}
+  for (var key in (stack || {})) {
+    if (!Object.prototype.hasOwnProperty.call(stack, key) || !present[key]) continue
+    var seen = {}
+    var at = key
+    var ok = true
+    while (stack[at]) {
+      if (seen[at] || !present[stack[at].on]) { ok = false; break }
+      seen[at] = true
+      at = stack[at].on
+    }
+    if (ok) active[key] = stack[key]
   }
+  return active
+}
+
+// [{ name, x, y, changed }] for every arrangeable monitor. Row monitors go
+// left to right, top-aligned; stacked ones are centered above or below the
+// monitor they stand on. Everything is shifted so the layout starts at 0x0.
+function computePositions(monitors, order, stack) {
+  var active = activeStack(monitors, stack)
+  var list = (monitors || []).filter(isArrangeable)
+  var shared = sharedDescriptions(list)
+  var byKey = {}
+  list.forEach(function(monitor) { byKey[monitorKey(monitor, shared)] = monitor })
+
+  var placed = {}
+  var row = sortMonitors(monitors, order).filter(function(monitor) {
+    return !active[monitorKey(monitor, shared)]
+  })
+  var x = 0
+  row.forEach(function(monitor) {
+    var size = logicalSize(monitor)
+    placed[monitorKey(monitor, shared)] = { monitor: monitor, x: x, y: 0, w: size.w, h: size.h }
+    x += size.w
+  })
+
+  function place(key) {
+    if (placed[key]) return placed[key]
+    var entry = active[key]
+    var base = place(entry.on)
+    var monitor = byKey[key]
+    var size = logicalSize(monitor)
+    placed[key] = {
+      monitor: monitor,
+      x: base.x + Math.round((base.w - size.w) / 2),
+      y: entry.side === "above" ? base.y - size.h : base.y + base.h,
+      w: size.w,
+      h: size.h
+    }
+    return placed[key]
+  }
+  for (var key in active) place(key)
+
+  var minX = 0
+  var minY = 0
+  for (var k in placed) {
+    minX = Math.min(minX, placed[k].x)
+    minY = Math.min(minY, placed[k].y)
+  }
+
+  // Row first, then stacked ones, each group in placement order.
+  var result = []
+  var keys = Object.keys(placed).sort(function(a, b) {
+    var sa = active[a] ? 1 : 0
+    var sb = active[b] ? 1 : 0
+    if (sa !== sb) return sa - sb
+    return placed[a].x - placed[b].x || placed[a].y - placed[b].y
+  })
+  keys.forEach(function(key) {
+    var p = placed[key]
+    var px = p.x - minX
+    var py = p.y - minY
+    result.push({
+      name: String(p.monitor.name),
+      x: px,
+      y: py,
+      changed: (Number(p.monitor.x) || 0) !== px || (Number(p.monitor.y) || 0) !== py
+    })
+  })
   return result
+}
+
+// Layout with `key` standing above or below `on`. Stacking on a side that
+// already holds a monitor stacks onto that one instead, so they pile up.
+// Returns the layout unchanged when it would stand on itself, directly or
+// through others.
+function withStacked(layout, key, on, side) {
+  var stack = {}
+  var source = (layout && layout.stack) || {}
+  for (var k in source) {
+    if (Object.prototype.hasOwnProperty.call(source, k) && k !== key) stack[k] = source[k]
+  }
+  var target = on
+  var guard = 0
+  var moved = true
+  while (moved && guard++ < 64) {
+    moved = false
+    for (var other in stack) {
+      if (stack[other].on === target && stack[other].side === side) {
+        target = other
+        moved = true
+        break
+      }
+    }
+  }
+  for (var at = target, steps = 0; at && steps < 64; at = stack[at] && stack[at].on, steps++) {
+    if (at === key) return copyLayout(layout)
+  }
+  stack[key] = { on: target, side: side === "below" ? "below" : "above" }
+  var copy = copyLayout(layout)
+  copy.stack = stack
+  return copy
+}
+
+// Layout with `key` back in the row, at `index` among the row `rowKeys`
+// (left to right, without `key`). Monitors that stood on it stay with it.
+function withRowPosition(layout, key, rowKeys, index) {
+  var keys = (rowKeys || []).filter(function(k) { return k !== key })
+  keys.splice(Math.max(0, Math.min(keys.length, index)), 0, key)
+  var copy = withOrder(layout, keys)
+  var stack = {}
+  var source = (layout && layout.stack) || {}
+  for (var k in source) {
+    if (Object.prototype.hasOwnProperty.call(source, k) && k !== key) stack[k] = source[k]
+  }
+  copy.stack = stack
+  return copy
+}
+
+function copyLayout(layout) {
+  return {
+    order: ((layout && layout.order) || []).slice(),
+    monitors: (layout && layout.monitors) || {},
+    withExternal: cleanExternalMode(layout && layout.withExternal),
+    stack: (layout && layout.stack) || {}
+  }
+}
+
+// Only well-formed { on, side } entries keyed by a non-empty string.
+function cleanStack(raw) {
+  var stack = {}
+  if (!raw || typeof raw !== "object") return stack
+  for (var key in raw) {
+    if (!Object.prototype.hasOwnProperty.call(raw, key) || key === "") continue
+    var entry = raw[key]
+    if (!entry || typeof entry.on !== "string" || entry.on === "" || entry.on === key) continue
+    if (entry.side !== "above" && entry.side !== "below") continue
+    stack[key] = { on: entry.on, side: entry.side }
+  }
+  return stack
+}
+
+// Where a tile dragged in the preview lands. `tiles`: [{ key, left, top,
+// width, height, stacked }] at rest in preview coordinates; `from`: index of
+// the dragged tile; (dx, dy): drag distance. The dragged tile's center over
+// the top or bottom `edge` share of another tile (or clear above or below it,
+// within its width) stacks it there: { side: "above" | "below", on: key },
+// provided it was moved that way by at least a quarter of its own height, so
+// a sideways drag never stacks by accident. Anywhere else it joins the row at `index` among the other row tiles, left
+// to right, by its center.
+function dropTarget(tiles, from, dx, dy, edge) {
+  var t = tiles && tiles[from]
+  if (!t) return null
+  var share = edge > 0 && edge < 0.5 ? edge : 0.3
+  var cx = t.left + t.width / 2 + (dx || 0)
+  var cy = t.top + t.height / 2 + (dy || 0)
+
+  var vertical = Math.abs(dy || 0) >= t.height / 4
+  var best = null
+  for (var i = 0; i < tiles.length && vertical; i++) {
+    if (i === from) continue
+    var o = tiles[i]
+    if (cx < o.left || cx > o.left + o.width) continue
+    var bottom = o.top + o.height
+    var side = null
+    var distance = 0
+    if (dy < 0 && cy < o.top + o.height * share) {
+      side = "above"
+      distance = Math.abs(cy - o.top)
+    } else if (dy > 0 && cy > bottom - o.height * share) {
+      side = "below"
+      distance = Math.abs(cy - bottom)
+    }
+    if (side && (!best || distance < best.distance)) best = { distance: distance, on: o.key, side: side }
+  }
+  if (best) return { side: best.side, on: best.on }
+
+  var index = 0
+  for (var j = 0; j < tiles.length; j++) {
+    if (j === from || tiles[j].stacked) continue
+    if (tiles[j].left + tiles[j].width / 2 < cx) index++
+  }
+  return { side: "row", index: index }
 }
 
 function luaString(value) {
@@ -517,7 +705,7 @@ function positionsToLua(positions, staging, parked) {
   var lines = []
   if (staging !== undefined && staging !== null) {
     for (var i = 0; i < positions.length; i++)
-      lines.push(positionRule(positions[i].name, staging + positions[i].x, 0))
+      lines.push(positionRule(positions[i].name, staging + positions[i].x, positions[i].y))
   }
   for (var j = 0; j < positions.length; j++)
     lines.push(positionRule(positions[j].name, positions[j].x, positions[j].y))
@@ -557,8 +745,11 @@ function dropIndex(tiles, from, offset) {
   return to
 }
 
-// View model for the panel: arrangeable monitors sorted by current position.
-function tilesFromMonitors(monitors) {
+// View model for the panel: arrangeable monitors sorted by current position,
+// left to right then top to bottom. `stacked` marks the ones standing on
+// another monitor (see activeStack).
+function tilesFromMonitors(monitors, stack) {
+  var active = activeStack(monitors, stack)
   var arrangeable = (monitors || []).filter(isArrangeable)
   var shared = sharedDescriptions(arrangeable)
   var labelCount = {}
@@ -576,12 +767,14 @@ function tilesFromMonitors(monitors) {
       label: labelCount[label] > 1 ? label + " · " + monitor.name : label,
       internal: isInternal(monitor),
       focused: monitor.focused === true,
+      stacked: !!active[monitorKey(monitor, shared)],
       x: Number(monitor.x) || 0,
+      y: Number(monitor.y) || 0,
       w: size.w,
       h: size.h
     }
   })
-  list.sort(function(a, b) { return a.x - b.x })
+  list.sort(function(a, b) { return a.x - b.x || a.y - b.y })
   return list
 }
 
@@ -621,6 +814,11 @@ if (typeof module !== "undefined") {
     mergeOrder: mergeOrder,
     sortMonitors: sortMonitors,
     computePositions: computePositions,
+    activeStack: activeStack,
+    withStacked: withStacked,
+    withRowPosition: withRowPosition,
+    cleanStack: cleanStack,
+    dropTarget: dropTarget,
     stagingX: stagingX,
     positionsToLua: positionsToLua,
     parkedOutputs: parkedOutputs,

@@ -6,6 +6,23 @@ All notable changes to this project are documented here. The format follows
 
 ## [Unreleased]
 
+## [0.7.0] - 2026-09-27
+
+### Added
+
+- Displays above or below another: drag a tile onto the top or bottom part
+  of another tile (an accent bar marks the edge it will land on), or pick it
+  up with `Enter` and press `k`/`j`. A stacked display is centered on the one
+  it stands on; several on one side pile up. Saved as `stack` in
+  `monitor-layout.json`; a display whose base is unplugged returns to the
+  row. The preview shows the real layout in both directions.
+
+### Fixed
+
+- The panel follows changes to `monitor-layout.json` made elsewhere, so the
+  WITH AN EXTERNAL DISPLAY buttons always show the saved mode, and Extend
+  always brings the laptop screen back.
+
 ## [0.6.0] - 2026-09-26
 
 ### Added

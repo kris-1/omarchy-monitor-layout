@@ -214,9 +214,9 @@ test("cleanSettings drops invalid fields and garbage", () => {
 })
 
 test("parseLayout tolerates invalid JSON and drops invalid monitor fields", () => {
-  assert.deepEqual(Model.parseLayout(""), { order: [], monitors: {}, withExternal: "extend" })
-  assert.deepEqual(Model.parseLayout("not json"), { order: [], monitors: {}, withExternal: "extend" })
-  assert.deepEqual(Model.parseLayout('{"order": ["a"], "monitors": "nope"}'), { order: ["a"], monitors: {}, withExternal: "extend" })
+  assert.deepEqual(Model.parseLayout(""), { order: [], monitors: {}, withExternal: "extend", stack: {} })
+  assert.deepEqual(Model.parseLayout("not json"), { order: [], monitors: {}, withExternal: "extend", stack: {} })
+  assert.deepEqual(Model.parseLayout('{"order": ["a"], "monitors": "nope"}'), { order: ["a"], monitors: {}, withExternal: "extend", stack: {} })
   const parsed = Model.parseLayout(JSON.stringify({
     order: ["a", "b"],
     monitors: {
@@ -224,7 +224,7 @@ test("parseLayout tolerates invalid JSON and drops invalid monitor fields", () =
       b: { scale: -5 } // cleans to {} entirely
     }
   }))
-  assert.deepEqual(parsed, { order: ["a", "b"], monitors: { a: { mode: "3440x1440@99.98", scale: 5 } }, withExternal: "extend" })
+  assert.deepEqual(parsed, { order: ["a", "b"], monitors: { a: { mode: "3440x1440@99.98", scale: 5 } }, withExternal: "extend", stack: {} })
 })
 
 test("serializeOrder output is unchanged", () => {
@@ -234,7 +234,7 @@ test("serializeOrder output is unchanged", () => {
 
 test("serializeLayout omits monitors when empty and round-trips otherwise", () => {
   assert.equal(Model.serializeLayout({ order: ["a"], monitors: {} }), Model.serializeOrder(["a"]))
-  const layout = { order: ["a"], monitors: { a: { scale: 1.25 } }, withExternal: "mirror" }
+  const layout = { order: ["a"], monitors: { a: { scale: 1.25 } }, withExternal: "mirror", stack: { b: { on: "a", side: "above" } } }
   assert.deepEqual(Model.parseLayout(Model.serializeLayout(layout)), layout)
 })
 
@@ -417,4 +417,73 @@ test("externalModeCommand acts only with a laptop screen and an external display
   assert.equal(Model.externalModeCommand([internal], "external-only"), null)
   assert.equal(Model.externalModeCommand([internal, { ...external, disabled: true }], "mirror"), null)
   assert.equal(Model.externalModeCommand([external], "external-only"), null)
+})
+
+test("computePositions centers a stacked monitor above the one it stands on", () => {
+  // Ultrawide (3440x1440) above the laptop (1536x960 logical).
+  const stack = { [Model.monitorKey(ultrawide)]: { on: Model.monitorKey(laptop), side: "above" } }
+  const positions = Model.computePositions([laptop, ultrawide], [], stack)
+  const byName = Object.fromEntries(positions.map(p => [p.name, p]))
+  assert.deepEqual([byName["eDP-1"].x, byName["eDP-1"].y], [952, 1440])
+  assert.deepEqual([byName["HDMI-A-1"].x, byName["HDMI-A-1"].y], [0, 0])
+})
+
+test("computePositions stacks below and ignores stacks on unplugged monitors", () => {
+  const stack = { [Model.monitorKey(laptop)]: { on: Model.monitorKey(ultrawide), side: "below" } }
+  const below = Object.fromEntries(Model.computePositions([laptop, ultrawide], [], stack).map(p => [p.name, [p.x, p.y]]))
+  assert.deepEqual(below, { "HDMI-A-1": [0, 0], "eDP-1": [952, 1440] })
+  // The monitor it stood on is gone: back in the row at 0x0.
+  const alone = Model.computePositions([laptop], [], stack)
+  assert.deepEqual(alone.map(p => [p.name, p.x, p.y]), [["eDP-1", 0, 0]])
+})
+
+test("activeStack drops loops", () => {
+  const a = { ...laptop }, b = { ...ultrawide }
+  const ka = Model.monitorKey(a), kb = Model.monitorKey(b)
+  const loop = { [ka]: { on: kb, side: "above" }, [kb]: { on: ka, side: "below" } }
+  assert.deepEqual(Model.activeStack([a, b], loop), {})
+})
+
+test("withStacked piles monitors on one side and refuses loops", () => {
+  let layout = { order: ["A", "B", "C"], monitors: {}, stack: {} }
+  layout = Model.withStacked(layout, "B", "A", "above")
+  layout = Model.withStacked(layout, "C", "A", "above")
+  assert.deepEqual(layout.stack, { B: { on: "A", side: "above" }, C: { on: "B", side: "above" } })
+  const refused = Model.withStacked(layout, "A", "C", "below")
+  assert.deepEqual(refused.stack, layout.stack)
+})
+
+test("withRowPosition unstacks into the row at an index", () => {
+  const layout = { order: ["A", "C"], monitors: {}, stack: { B: { on: "A", side: "above" } } }
+  const moved = Model.withRowPosition(layout, "B", ["A", "C"], 1)
+  assert.deepEqual(moved.order, ["A", "B", "C"])
+  assert.deepEqual(moved.stack, {})
+})
+
+test("cleanStack keeps only well-formed entries", () => {
+  assert.deepEqual(Model.cleanStack({ a: { on: "b", side: "above" }, c: { on: "c", side: "above" },
+    d: { on: "b", side: "left" }, e: "x" }), { a: { on: "b", side: "above" } })
+})
+
+test("dropTarget stacks above or below, otherwise picks a row index", () => {
+  const tiles = [
+    { key: "L", left: 0, top: 40, width: 40, height: 30, stacked: false },
+    { key: "W", left: 40, top: 30, width: 90, height: 40, stacked: false }
+  ]
+  // Laptop dragged up over the ultrawide's top edge.
+  assert.deepEqual(Model.dropTarget(tiles, 0, 70, -55), { side: "above", on: "W" })
+  assert.deepEqual(Model.dropTarget(tiles, 0, 70, 50), { side: "below", on: "W" })
+  // Over the ultrawide's bottom or top share, which fills the preview's height.
+  assert.deepEqual(Model.dropTarget(tiles, 0, 70, 20), { side: "below", on: "W" })
+  assert.deepEqual(Model.dropTarget(tiles, 0, 70, -20), { side: "above", on: "W" })
+  // Dragged sideways past the ultrawide's center: row index 1.
+  assert.deepEqual(Model.dropTarget(tiles, 0, 80, 0), { side: "row", index: 1 })
+  assert.deepEqual(Model.dropTarget(tiles, 0, 5, 0), { side: "row", index: 0 })
+  // A sideways drag drifting a little up stays in the row.
+  assert.deepEqual(Model.dropTarget(tiles, 0, 80, -5), { side: "row", index: 1 })
+})
+
+test("positionsToLua stages stacked monitors at their target height", () => {
+  const lines = Model.positionsToLua([{ name: "a", x: 0, y: 0 }, { name: "b", x: 0, y: 900 }], 5000).split("\n")
+  assert.equal(lines[1], 'hl.monitor({ output = "b", position = "5000x900" })')
 })
