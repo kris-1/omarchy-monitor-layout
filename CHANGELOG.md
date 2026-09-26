@@ -6,6 +6,14 @@ All notable changes to this project are documented here. The format follows
 
 ## [Unreleased]
 
+## [0.5.1] - 2026-09-26
+
+### Changed
+
+- The ARRANGEMENT section is now called DISPLAY SETTINGS and also appears
+  with a single display, so its settings can be opened; dragging needs two.
+  With one display, `Enter` on its tile opens the settings.
+
 ## [0.5.0] - 2026-09-26
 
 ### Added

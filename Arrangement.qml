@@ -49,7 +49,9 @@ Column {
       if (tiles[i].name === propertiesOutput) return tiles[i]
     return null
   }
-  readonly property bool available: tiles.length > 1
+  // One display still gets the section, for its settings; reordering needs two.
+  readonly property bool available: tiles.length > 0
+  readonly property bool reorderable: tiles.length > 1
 
   // Keyboard cursor over the tiles, and the tile picked up with Enter (-1 = none).
   property int selectedIndex: 0
@@ -64,7 +66,7 @@ Column {
 
   // h/l: move the cursor, or the picked-up tile.
   function moveCursor(dx) {
-    if (!available) return
+    if (!reorderable) return
     var to = Math.max(0, Math.min(tiles.length - 1, selectedIndex + dx))
     if (grabbedIndex >= 0) {
       if (to === grabbedIndex) return
@@ -74,9 +76,14 @@ Column {
     selectedIndex = to
   }
 
-  // Enter: pick up / drop the tile under the cursor.
+  // Enter: pick up / drop the tile under the cursor; with a single display,
+  // open its settings.
   function activate() {
     if (!available) return
+    if (!reorderable) {
+      showProperties()
+      return
+    }
     grabbedIndex = grabbedIndex >= 0 ? -1 : selectedIndex
   }
 
@@ -216,7 +223,7 @@ Column {
 
     PanelSectionHeader {
       id: header
-      text: "ARRANGEMENT"
+      text: "DISPLAY SETTINGS"
       foreground: root.bar.foreground
       fontFamily: root.bar.fontFamily
       anchors.left: parent.left
@@ -227,8 +234,9 @@ Column {
       id: hint
       textFormat: Text.PlainText
       text: root.grabbedIndex >= 0 ? "H/L TO MOVE · ENTER TO DROP"
-        : root.cursorActive && root.focused ? "ENTER TO PICK UP · I FOR DETAILS"
-        : "DRAG · DOUBLE-CLICK FOR DETAILS"
+        : root.cursorActive && root.focused
+          ? (root.reorderable ? "ENTER TO PICK UP · I FOR SETTINGS" : "ENTER FOR SETTINGS")
+        : root.reorderable ? "DRAG · DOUBLE-CLICK FOR SETTINGS" : "DOUBLE-CLICK FOR SETTINGS"
       color: Qt.darker(root.bar.foreground, 1.4)
       font.family: root.bar.fontFamily
       font.pixelSize: Style.font.caption
@@ -326,7 +334,8 @@ Column {
             // the gesture and swallow the release.
             preventStealing: true
             hoverEnabled: true
-            cursorShape: pressed ? Qt.ClosedHandCursor : Qt.OpenHandCursor
+            cursorShape: !root.reorderable ? Qt.PointingHandCursor
+              : pressed ? Qt.ClosedHandCursor : Qt.OpenHandCursor
 
             property real pressX: 0
 
@@ -335,6 +344,7 @@ Column {
               root.focusRequested()
             }
             onPressed: function(mouse) {
+              if (!root.reorderable) return
               pressX = mapToItem(canvas, mouse.x, 0).x
               root.grabbedIndex = -1
               canvas.dragOffset = 0

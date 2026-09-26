@@ -13,12 +13,12 @@ the result depends on the order the outputs come up. If your external monitor
 sits to the right of your laptop but the pointer has to leave through the
 *left* edge to reach it, this plugin fixes it and keeps it fixed.
 
-![Display widget with the ARRANGEMENT section](preview.png)
+![Display widget with the DISPLAY SETTINGS section](preview.png)
 
 ## Features
 
 - **A drop-in Display widget**: a copy of Omarchy's built-in one with a new
-  ARRANGEMENT section between SCALE and DISPLAYS. Enabling the plugin puts it
+  DISPLAY SETTINGS section between SCALE and DISPLAYS. Enabling the plugin puts it
   in place of the built-in widget, and the Display shortcut
   (`SUPER + CTRL + D`) opens it; disabling it brings the built-in one back.
 - **Drag-and-drop arrangement**, with tiles scaled to each display's logical
@@ -41,7 +41,7 @@ sits to the right of your laptop but the pointer has to leave through the
   display goes back to its previous settings, so a mode it cannot show never
   sticks. Kept settings are remembered per display and restored after
   reconnects and reloads.
-- **Keyboard friendly.** In the ARRANGEMENT section `h`/`l` choose a display,
+- **Keyboard friendly.** In the DISPLAY SETTINGS section `h`/`l` choose a display,
   `Enter` picks it up, `h`/`l` move it, `Enter` drops it, `I` opens its
   properties.
 
@@ -75,10 +75,10 @@ omarchy plugin update monitor-layout
 
 1. Open the Display widget: click its icon on the bar or press
    `SUPER + CTRL + D`.
-2. In the ARRANGEMENT section, drag a display tile to the left or right of the
+2. In the DISPLAY SETTINGS section, drag a display tile to the left or right of the
    others, the way the screens stand on your desk, and release it. The new
    layout applies immediately.
-3. Or use the keyboard: `j`/`k` move to the ARRANGEMENT section, `h`/`l`
+3. Or use the keyboard: `j`/`k` move to the DISPLAY SETTINGS section, `h`/`l`
    choose a display, `Enter` picks it up, `h`/`l` move it, `Enter` drops it,
    `Esc` closes the panel.
 4. Double-click a display tile (or press `I` on it) to open its properties.
@@ -142,9 +142,9 @@ here or in the Omarchy discussions.
 
 | File | Role |
 |------|------|
-| `Panel.qml` | Omarchy's Display widget with the ARRANGEMENT section added; every change is marked `arrangement`. |
+| `Panel.qml` | Omarchy's Display widget with the DISPLAY SETTINGS section added; every change is marked `arrangement`. |
 | `Model.js` | Omarchy's Display widget helpers, unchanged. |
-| `Arrangement.qml` | The ARRANGEMENT section: live preview, drag-and-drop, keyboard control. Saves the order and applies it immediately. Embeddable in any panel. |
+| `Arrangement.qml` | The DISPLAY SETTINGS section: live preview, drag-and-drop, keyboard control. Saves the order and applies it immediately. Embeddable in any panel. |
 | `MonitorProperties.qml` | The properties window opened from a tile: details, resolution, refresh rate, scale, rotation, adaptive sync; tries changes before they are kept. |
 | `KeepSettingsDialog.qml` | The modal *Keep these display settings?* countdown. |
 | `Service.qml` | Always-loaded service. Re-applies the saved layout on `monitoradded`, `monitorremoved` and `configreloaded`, and when the order file changes. |
