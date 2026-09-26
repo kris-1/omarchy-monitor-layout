@@ -12,18 +12,21 @@ for Hyprland, and nothing else. See README.md for the user-facing description.
 - QML follows the style of Omarchy's first-party panels
   (`/usr/share/omarchy/shell/plugins/panels/*`): `qs.Ui` components,
   `Style`/`Color` tokens from `qs.Commons`, no hard-coded colors or sizes.
-- Scope: Omarchy's Display widget plus monitor positioning, nothing else.
+- Scope: Omarchy's Display widget plus monitor positioning and the
+  per-display properties window (mode, scale, rotation, VRR), nothing else.
   `Panel.qml` and `Model.js` are copies of Omarchy's
   `shell/plugins/panels/monitor/` (see NOTICE). Keep their diff against
   upstream limited to the `arrangement` wiring so upstream changes can be
-  merged; put new UI in `Arrangement.qml`.
+  merged; put new UI in `Arrangement.qml` (and the windows it opens,
+  `MonitorProperties.qml`, `KeepSettingsDialog.qml`).
 - `omarchy.clonedFrom: omarchy.monitor` stays in the manifest on purpose (it
   makes the plugin replace the built-in Display widget and receive its
   shortcut), although the marketplace guide suggests removing it for plugins
   that merely started as clones.
 - The long-term goal is an upstream merge of `Arrangement.qml` into Omarchy's
   Display widget. Keep it self-contained, with `bar`, `active`, `focused`,
-  `cursorActive`, `moveCursor()`, `activate()` and `focusRequested` as its API.
+  `cursorActive`, `panel`, `moveCursor()`, `activate()`, `showProperties()`,
+  `forgetSetting()` and `focusRequested` as its API.
 - Never edit `/usr/share/omarchy/`; read it for reference only.
 - The plugin must pass `omarchy plugin validate`: no symlinks, relative entry
   points, id outside the reserved `omarchy.*` namespace.

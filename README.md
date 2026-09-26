@@ -1,8 +1,9 @@
 # Display with Monitor Layout for Omarchy
 
-Omarchy's own **Display** widget with exactly one addition: arrange your
-displays the way they stand on your desk by dragging them, like the Windows
-display settings. An [Omarchy](https://omarchy.org/) shell plugin.
+Omarchy's own **Display** widget with one addition: arrange your displays the
+way they stand on your desk by dragging them, and double-click one to see and
+change its resolution, refresh rate, scale, rotation and adaptive sync, like
+the Windows display settings. An [Omarchy](https://omarchy.org/) shell plugin.
 
 Everything else — brightness, text size, scale, turning displays on and off —
 is the unchanged built-in widget, so nothing else in your setup changes.
@@ -28,12 +29,21 @@ sits to the right of your laptop but the pointer has to leave through the
   config reload.
 - **Port independent.** Displays are remembered by their description (make,
   model and serial), so a monitor keeps its place on any port or dock.
-- **Leaves your config alone.** Only positions are changed, with
-  position-only monitor rules; mode, scale, VRR and the rest of
-  `~/.config/hypr/monitors.lua` stay as they are. Displays are moved through a
+- **Leaves your config alone.** `~/.config/hypr/monitors.lua` is never edited:
+  positions and the settings you keep in the properties window are applied as
+  runtime monitor rules that merge into yours. Displays are moved through a
   staging area, so Hyprland never sees an overlapping layout.
+- **Display properties.** Double-click a tile for a window with what the
+  display reports (make, model, serial, port, size, pixel density) and its
+  resolution, refresh rate, scale, rotation and adaptive sync (VRR).
+- **Changes you can take back.** Apply tries a change right away and asks
+  *Keep these display settings?*; without an answer within 30 seconds the
+  display goes back to its previous settings, so a mode it cannot show never
+  sticks. Kept settings are remembered per display and restored after
+  reconnects and reloads.
 - **Keyboard friendly.** In the ARRANGEMENT section `h`/`l` choose a display,
-  `Enter` picks it up, `h`/`l` move it, `Enter` drops it.
+  `Enter` picks it up, `h`/`l` move it, `Enter` drops it, `I` opens its
+  properties.
 
 ## Requirements and dependencies
 
@@ -71,8 +81,14 @@ omarchy plugin update monitor-layout
 3. Or use the keyboard: `j`/`k` move to the ARRANGEMENT section, `h`/`l`
    choose a display, `Enter` picks it up, `h`/`l` move it, `Enter` drops it,
    `Esc` closes the panel.
+4. Double-click a display tile (or press `I` on it) to open its properties.
+   Pick a resolution, refresh rate, scale, rotation or adaptive sync mode and
+   press **Apply**. Confirm with **Keep changes** within 30 seconds, or the
+   previous settings come back. `j`/`k`/`h`/`l` and `Enter` work here too;
+   `Esc` closes the window.
 
-The layout is kept when you reconnect a display, dock, or reload Hyprland.
+The layout and kept settings survive reconnecting a display, docking and
+reloading Hyprland.
 
 ## Configure
 
@@ -82,15 +98,18 @@ The layout is kept when you reconnect a display, dock, or reload Hyprland.
   [How it works](#how-it-works)). You can edit it by hand; the service
   re-applies the layout when the file changes.
 
-The plugin never edits `~/.config/hypr/monitors.lua`; keep mode, scale and
-other monitor settings there as usual.
+The plugin never edits `~/.config/hypr/monitors.lua`. Settings kept in the
+properties window take precedence over it for that display; remove them from
+the display's entry in the order file to let `monitors.lua` decide again.
+Choosing a preset in the panel's SCALE section clears a kept scale for the
+focused display.
 
 ## Remove
 
 ```bash
 omarchy plugin remove monitor-layout
-rm -f ~/.config/omarchy/monitor-layout.json   # optional: forget the saved order
-hyprctl reload                                # go back to the positions in monitors.lua
+rm -f ~/.config/omarchy/monitor-layout.json   # optional: forget the saved layout
+hyprctl reload                                # go back to the settings in monitors.lua
 ```
 
 Removing the plugin puts the built-in Display widget back on the bar.
@@ -105,8 +124,9 @@ a whole copy of the widget.
 The plugin is built so that it can be merged upstream with little effort:
 
 - `Arrangement.qml` is a self-contained section with a small API (`bar`,
-  `active`, `focused`, `cursorActive`, `moveCursor()`, `activate()`,
-  `focusRequested`). Dropping it between SCALE and DISPLAYS in
+  `active`, `focused`, `cursorActive`, `panel`, `moveCursor()`, `activate()`,
+  `showProperties()`, `forgetSetting()`, `focusRequested`), and it brings its
+  own properties window. Dropping it between SCALE and DISPLAYS in
   [`shell/plugins/panels/monitor/Panel.qml`](https://github.com/omacom/omarchy/blob/quattro/shell/plugins/panels/monitor/Panel.qml)
   and adding an `"arrangement"`
   keyboard section is about 40 lines of wiring.
@@ -125,20 +145,30 @@ here or in the Omarchy discussions.
 | `Panel.qml` | Omarchy's Display widget with the ARRANGEMENT section added; every change is marked `arrangement`. |
 | `Model.js` | Omarchy's Display widget helpers, unchanged. |
 | `Arrangement.qml` | The ARRANGEMENT section: live preview, drag-and-drop, keyboard control. Saves the order and applies it immediately. Embeddable in any panel. |
-| `Service.qml` | Always-loaded service. Re-applies the saved order on `monitoradded`, `monitorremoved` and `configreloaded`, and when the order file changes. |
-| `LayoutApplier.qml` | Reads the order and `hyprctl monitors -j`, then moves the displays in one `hyprctl eval` call — only when something is out of place. |
-| `LayoutModel.js` | Pure layout logic (sorting, positions, staging, drop target), unit tested with Node. |
+| `MonitorProperties.qml` | The properties window opened from a tile: details, resolution, refresh rate, scale, rotation, adaptive sync; tries changes before they are kept. |
+| `KeepSettingsDialog.qml` | The modal *Keep these display settings?* countdown. |
+| `Service.qml` | Always-loaded service. Re-applies the saved layout on `monitoradded`, `monitorremoved` and `configreloaded`, and when the order file changes. |
+| `LayoutApplier.qml` | Reads the layout and `hyprctl monitors -j`, restores kept settings that have drifted, then moves the displays in one `hyprctl eval` call — only when something is out of place. |
+| `LayoutModel.js` | Pure logic (sorting, positions, staging, drop target, modes, settings rules), unit tested with Node. |
 
-The order lives in `~/.config/omarchy/monitor-layout.json`:
+The layout lives in `~/.config/omarchy/monitor-layout.json`:
 
 ```json
 {
   "order": [
     "Lenovo Group Limited 0x8AB1",
     "AOC U34V5C WQVP7HA000383"
-  ]
+  ],
+  "monitors": {
+    "AOC U34V5C WQVP7HA000383": { "mode": "3440x1440@99.98", "scale": 1, "vrr": 1 }
+  }
 }
 ```
+
+`monitors` holds the settings kept in the properties window, per display:
+`mode` (`WIDTHxHEIGHT@HZ`), `scale`, `transform` (0–3 rotate by 0°, 90°,
+180°, 270°) and `vrr` (0 off, 1 on, 2 fullscreen only). Every field is
+optional.
 
 Entries may be monitor descriptions or output names (`eDP-1`, `HDMI-A-1`).
 Displays that are not listed are placed to the right, in their current order.
@@ -179,6 +209,9 @@ Before a release, test by hand:
   `omarchy-shell omarchy.monitor open` / `close`;
 - brightness, text size, scale and display toggles still work;
 - drag a display to each side and check `hyprctl monitors`;
+- open a display's properties, apply a change, then let it revert, revert it
+  and keep it; check `monitor-layout.json` and that `hyprctl reload` restores
+  the kept settings;
 - `hyprctl reload`, unplug and replug a display: the layout comes back;
 - `omarchy plugin disable monitor-layout` (the built-in Display comes back),
   `enable`, `omarchy restart shell`, and finally

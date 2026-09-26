@@ -8,9 +8,11 @@ import "LayoutModel.js" as LayoutModel
 
 // ARRANGEMENT section: a live, scaled preview of the
 // connected displays. Drag a tile to change the left-to-right order, or drive
-// it from the keyboard through moveCursor()/activate(). The order is saved to
-// ~/.config/omarchy/monitor-layout.json and applied right away; Service.qml
-// keeps it applied across hotplug and config reloads.
+// it from the keyboard through moveCursor()/activate(). Double-click a tile
+// (or showProperties() for the tile under the cursor) to open its properties
+// window (MonitorProperties.qml). The order and the settings kept there are
+// saved to ~/.config/omarchy/monitor-layout.json and applied right away;
+// Service.qml keeps them applied across hotplug and config reloads.
 //
 // Self-contained so any panel can embed it, e.g. a Display panel:
 //
@@ -19,6 +21,7 @@ import "LayoutModel.js" as LayoutModel
 //     active: root.opened
 //     focused: root.focusSection === "arrangement"
 //     cursorActive: root.cursorActive
+//     panel: panelWindow   // the KeyboardPanel, to open properties beside it
 //     onFocusRequested: { root.cursorActive = true; root.focusSection = "arrangement" }
 //   }
 Column {
@@ -30,11 +33,22 @@ Column {
   // The host's keyboard cursor is on this section / visible at all.
   property bool focused: false
   property bool cursorActive: false
+  // Host KeyboardPanel; the properties window opens beside its card.
+  property var panel: null
 
   readonly property string orderPath: Quickshell.env("HOME") + "/.config/omarchy/monitor-layout.json"
 
   // [{ name, key, label, internal, focused, x, w, h }], left to right.
   property var tiles: []
+  // Raw `hyprctl monitors -j` output behind the tiles.
+  property var monitors: []
+  // Output shown in the properties window ("" = closed).
+  property string propertiesOutput: ""
+  readonly property var propertiesTile: {
+    for (var i = 0; i < tiles.length; i++)
+      if (tiles[i].name === propertiesOutput) return tiles[i]
+    return null
+  }
   readonly property bool available: tiles.length > 1
 
   // Keyboard cursor over the tiles, and the tile picked up with Enter (-1 = none).
@@ -66,6 +80,26 @@ Column {
     grabbedIndex = grabbedIndex >= 0 ? -1 : selectedIndex
   }
 
+  // I: open the properties of the tile under the cursor.
+  function showProperties() {
+    if (!available || grabbedIndex >= 0 || !tiles[selectedIndex]) return
+    propertiesOutput = tiles[selectedIndex].name
+  }
+
+  // Stop keeping a setting for an output, e.g. when the panel's SCALE row
+  // changes the scale in monitors.lua, which should then win.
+  function forgetSetting(output, field) {
+    for (var i = 0; i < tiles.length; i++) {
+      if (tiles[i].name !== output) continue
+      var saved = orderFile.layout.monitors[tiles[i].key]
+      if (!saved || saved[field] === undefined) return
+      var change = {}
+      change[field] = null
+      orderFile.saveSettings(tiles[i].key, change)
+      return
+    }
+  }
+
   // Move a tile, show the result immediately, then persist and apply it.
   function moveTile(from, to) {
     if (from === to || from < 0 || to < 0 || from >= tiles.length || to >= tiles.length) return
@@ -77,6 +111,7 @@ Column {
 
   onActiveChanged: {
     grabbedIndex = -1
+    if (!active) propertiesOutput = ""
     if (active) {
       selectedIndex = 0
       refresh()
@@ -98,28 +133,57 @@ Column {
       onStreamFinished: {
         var monitors = []
         try { monitors = JSON.parse(String(text || "[]")) } catch (e) { monitors = [] }
+        root.monitors = monitors
         root.tiles = LayoutModel.tilesFromMonitors(monitors)
       }
     }
   }
 
-  // Saved order. Kept in memory so remembered-but-unplugged monitors survive
-  // a save made while they are away.
+  // Saved layout: order and per-monitor settings. Kept in memory so
+  // remembered-but-unplugged monitors survive a save made while they are away.
   FileView {
     id: orderFile
     path: root.orderPath
     atomicWrites: true
     printErrors: false
 
-    property var order: []
+    property var layout: ({ order: [], monitors: {} })
 
-    onLoaded: order = LayoutModel.parseOrder(text())
-    onLoadFailed: order = []
+    onLoaded: layout = LayoutModel.parseLayout(text())
+    onLoadFailed: layout = { order: [], monitors: {} }
 
     function save(keys) {
-      order = LayoutModel.mergeOrder(keys, order)
-      setText(LayoutModel.serializeOrder(order))
+      layout = { order: LayoutModel.mergeOrder(keys, layout.order), monitors: layout.monitors }
+      setText(LayoutModel.serializeLayout(layout))
       applier.apply()
+    }
+
+    // Already live (tried in the properties window), so only saved here.
+    function saveSettings(key, settings) {
+      layout = LayoutModel.withMonitorSettings(layout, key, settings)
+      setText(LayoutModel.serializeLayout(layout))
+    }
+  }
+
+  MonitorProperties {
+    id: properties
+    bar: root.bar
+    hostPanel: root.panel
+    open: root.active && root.propertiesTile !== null
+    monitor: {
+      var tile = root.propertiesTile
+      if (!tile) return null
+      for (var i = 0; i < root.monitors.length; i++)
+        if (root.monitors[i].name === tile.name) return root.monitors[i]
+      return null
+    }
+    savedSettings: root.propertiesTile ? (orderFile.layout.monitors[root.propertiesTile.key] || {}) : ({})
+    onCloseRequested: root.propertiesOutput = ""
+    // A new mode, scale or rotation changes the tile's size: re-pack the row
+    // without restoring saved settings over the change being tried.
+    onSettingsApplied: applier.apply(true)
+    onKept: function(settings) {
+      if (root.propertiesTile) orderFile.saveSettings(root.propertiesTile.key, settings)
     }
   }
 
@@ -162,7 +226,9 @@ Column {
     Text {
       id: hint
       textFormat: Text.PlainText
-      text: root.grabbedIndex >= 0 ? "H/L TO MOVE · ENTER TO DROP" : "DRAG TO REORDER"
+      text: root.grabbedIndex >= 0 ? "H/L TO MOVE · ENTER TO DROP"
+        : root.cursorActive && root.focused ? "ENTER TO PICK UP · I FOR DETAILS"
+        : "DRAG · DOUBLE-CLICK FOR DETAILS"
       color: Qt.darker(root.bar.foreground, 1.4)
       font.family: root.bar.fontFamily
       font.pixelSize: Style.font.caption
@@ -280,6 +346,7 @@ Column {
                 mapToItem(canvas, mouse.x, 0).x - pressX)
             }
             onReleased: canvas.finishDrag()
+            onDoubleClicked: root.propertiesOutput = screenTile.modelData.name
             onCanceled: {
               canvas.dragIndex = -1
               canvas.dragOffset = 0

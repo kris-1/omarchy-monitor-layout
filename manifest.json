@@ -2,10 +2,10 @@
   "schemaVersion": 1,
   "id": "monitor-layout",
   "name": "Display with Monitor Layout",
-  "version": "0.4.2",
+  "version": "0.5.0",
   "author": "Krzysztof Golab Magalhaes",
   "license": "MIT",
-  "description": "Omarchy's Display widget with one addition: drag-and-drop monitor arrangement that survives hotplug and config reloads",
+  "description": "Omarchy's Display widget with drag-and-drop monitor arrangement and per-display properties (resolution, refresh rate, scale, rotation, VRR) that survive hotplug and config reloads",
   "kinds": [
     "service",
     "bar-widget"
@@ -17,7 +17,7 @@
   },
   "barWidget": {
     "displayName": "Display",
-    "description": "Brightness, text size, scale, displays and drag-and-drop monitor arrangement",
+    "description": "Brightness, text size, scale, displays, drag-and-drop monitor arrangement and display properties",
     "category": "System",
     "allowMultiple": false,
     "defaultSection": "right"

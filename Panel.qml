@@ -321,6 +321,8 @@ Panel {
   }
 
   function setScale(scale) {
+    // arrangement: a scale kept in the properties window would override this.
+    arrangement.forgetSetting(root.focusedMonitor, "scale")
     actionProc.command = ["bash", "-c", "omarchy-hyprland-monitor-scaling " + scale]
     if (!actionProc.running) actionProc.running = true
   }
@@ -520,6 +522,11 @@ Panel {
         }
       }
       onActivateRequested: if (root.cursorActive) root.activateCursor()
+      // arrangement: I opens the properties of the tile under the cursor.
+      onTextKey: function(text) {
+        if (root.cursorActive && root.focusSection === "arrangement" && (text === "i" || text === "I"))
+          arrangement.showProperties()
+      }
       onCloseRequested: root.close()
       onTabRequested: function(direction) { root.switchPanel(direction) }
 
@@ -820,6 +827,7 @@ Panel {
             active: root.opened
             focused: root.focusSection === "arrangement"
             cursorActive: root.cursorActive
+            panel: panel
             onFocusRequested: if (!root.reflowingText) {
               root.cursorActive = true
               root.focusSection = "arrangement"

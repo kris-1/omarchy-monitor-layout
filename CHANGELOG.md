@@ -6,6 +6,23 @@ All notable changes to this project are documented here. The format follows
 
 ## [Unreleased]
 
+## [0.5.0] - 2026-09-26
+
+### Added
+
+- Display properties: double-click a tile in ARRANGEMENT (or press `I` on it)
+  to open a window with the display's details and its resolution, refresh
+  rate, scale, rotation and adaptive sync.
+- Changes are tried first and confirmed in a modal *Keep these display
+  settings?* dialog; without confirmation they revert after 30 seconds.
+- Kept settings are saved per display in `monitor-layout.json` (`monitors`)
+  and restored by the service after hotplug and config reloads.
+
+### Changed
+
+- Choosing a preset in the SCALE section clears a scale kept in the
+  properties window for the focused display, so the preset wins.
+
 ## [0.4.2] - 2026-09-26
 
 ### Fixed

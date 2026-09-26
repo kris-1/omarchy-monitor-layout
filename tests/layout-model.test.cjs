@@ -194,6 +194,179 @@ test("dropIndex handles three tiles and zero offset", () => {
   assert.equal(Model.dropIndex(tiles, 2, -230), 0)
 })
 
+test("cleanSettings keeps only valid fields and normalizes scale", () => {
+  assert.deepEqual(Model.cleanSettings({ mode: "3440x1440@99.98", scale: 1.256, transform: 1, vrr: 1 }),
+    { mode: "3440x1440@99.98", scale: 1.26, transform: 1, vrr: 1 })
+  assert.deepEqual(Model.cleanSettings({ mode: "3440x1440@60" }), { mode: "3440x1440@60" })
+})
+
+test("cleanSettings drops invalid fields and garbage", () => {
+  assert.deepEqual(Model.cleanSettings({ mode: "not a mode", scale: 0, transform: 8, vrr: 3 }), {})
+  assert.deepEqual(Model.cleanSettings({ mode: "3440x1440@99.98Hz" }), {}) // saved format has no "Hz"
+  assert.deepEqual(Model.cleanSettings({ scale: -1 }), {})
+  assert.deepEqual(Model.cleanSettings({ scale: 11 }), {})
+  assert.deepEqual(Model.cleanSettings({ scale: 10 }), { scale: 10 })
+  assert.deepEqual(Model.cleanSettings({ transform: -1 }), {})
+  assert.deepEqual(Model.cleanSettings({ transform: 1.5 }), {})
+  assert.deepEqual(Model.cleanSettings(null), {})
+  assert.deepEqual(Model.cleanSettings("garbage"), {})
+  assert.deepEqual(Model.cleanSettings([1, 2, 3]), {})
+})
+
+test("parseLayout tolerates invalid JSON and drops invalid monitor fields", () => {
+  assert.deepEqual(Model.parseLayout(""), { order: [], monitors: {} })
+  assert.deepEqual(Model.parseLayout("not json"), { order: [], monitors: {} })
+  assert.deepEqual(Model.parseLayout('{"order": ["a"], "monitors": "nope"}'), { order: ["a"], monitors: {} })
+  const parsed = Model.parseLayout(JSON.stringify({
+    order: ["a", "b"],
+    monitors: {
+      a: { mode: "3440x1440@99.98", scale: 5, garbage: true },
+      b: { scale: -5 } // cleans to {} entirely
+    }
+  }))
+  assert.deepEqual(parsed, { order: ["a", "b"], monitors: { a: { mode: "3440x1440@99.98", scale: 5 } } })
+})
+
+test("serializeOrder output is unchanged", () => {
+  assert.equal(Model.serializeOrder(["x", "y"]), '{\n  "order": [\n    "x",\n    "y"\n  ]\n}\n')
+  assert.equal(Model.parseOrder(Model.serializeOrder(["x", "y"])) && true, true)
+})
+
+test("serializeLayout omits monitors when empty and round-trips otherwise", () => {
+  assert.equal(Model.serializeLayout({ order: ["a"], monitors: {} }), Model.serializeOrder(["a"]))
+  const layout = { order: ["a"], monitors: { a: { scale: 1.25 } } }
+  assert.deepEqual(Model.parseLayout(Model.serializeLayout(layout)), layout)
+})
+
+test("withMonitorSettings merges without mutating and removes null fields", () => {
+  const layout = { order: ["a"], monitors: { a: { mode: "1920x1080@60", scale: 1.25 } } }
+  const removed = Model.withMonitorSettings(layout, "a", { scale: null })
+  assert.deepEqual(removed.monitors.a, { mode: "1920x1080@60" })
+  assert.deepEqual(layout.monitors.a, { mode: "1920x1080@60", scale: 1.25 }) // original untouched
+
+  const cleared = Model.withMonitorSettings(layout, "a", { mode: null, scale: null })
+  assert.equal(cleared.monitors.a, undefined)
+
+  const created = Model.withMonitorSettings({ order: [], monitors: {} }, "b", { transform: 1 })
+  assert.deepEqual(created.monitors, { b: { transform: 1 } })
+})
+
+test("parseMode accepts the hyprctl and saved-settings mode spellings", () => {
+  assert.deepEqual(Model.parseMode("3440x1440@99.98Hz"), { width: 3440, height: 1440, refresh: 99.98 })
+  assert.deepEqual(Model.parseMode("3440x1440@99.98"), { width: 3440, height: 1440, refresh: 99.98 })
+  assert.deepEqual(Model.parseMode("1920x1080"), { width: 1920, height: 1080, refresh: 0 })
+  assert.equal(Model.parseMode("garbage"), null)
+})
+
+test("formatRefresh trims to at most 2 decimals", () => {
+  assert.equal(Model.formatRefresh(60), "60")
+  assert.equal(Model.formatRefresh(99.982), "99.98")
+  assert.equal(Model.formatRefresh(59.94), "59.94")
+})
+
+test("modeString formats width, height and refresh", () => {
+  assert.equal(Model.modeString(3440, 1440, 99.982), "3440x1440@99.98")
+})
+
+test("resolutionOptions dedupes and sorts by pixel count then width", () => {
+  assert.deepEqual(Model.resolutionOptions(["3072x1920@60.00Hz", "3072x1920@120.00Hz"]), [
+    { value: "3072x1920", label: "3072 × 1920", width: 3072, height: 1920 }
+  ])
+  const modes = [
+    "1920x1080@60.00Hz", "1920x1080@144.00Hz",
+    "3840x2160@60.00Hz",
+    "2560x1440@165.00Hz"
+  ]
+  assert.deepEqual(Model.resolutionOptions(modes).map(o => o.value), ["3840x2160", "2560x1440", "1920x1080"])
+})
+
+test("refreshOptions dedupes by formatted value and sorts highest first", () => {
+  const options = Model.refreshOptions(["3072x1920@60.00Hz", "3072x1920@120.00Hz"], 3072, 1920)
+  assert.deepEqual(options, [
+    { value: "120", label: "120 Hz" },
+    { value: "60", label: "60 Hz" }
+  ])
+  assert.deepEqual(Model.refreshOptions(["1920x1080@60.00Hz"], 3072, 1920), [])
+})
+
+test("liveSettings reads a hyprctl monitor object", () => {
+  assert.deepEqual(Model.liveSettings({ width: 3440, height: 1440, refreshRate: 99.982, scale: 1.25, transform: 1, vrr: true }),
+    { mode: "3440x1440@99.98", scale: 1.25, transform: 1, vrr: 1 })
+  assert.deepEqual(Model.liveSettings({ width: 1920, height: 1080, refreshRate: 60, scale: 1, transform: 0, vrr: false }),
+    { mode: "1920x1080@60", scale: 1, transform: 0, vrr: 0 })
+})
+
+test("settingsMatch compares only the fields present in settings", () => {
+  const monitor = { width: 3440, height: 1440, refreshRate: 99.98, scale: 1.25, transform: 0, vrr: true }
+  assert.equal(Model.settingsMatch(monitor, { mode: "3440x1440@99.95" }), true) // within 0.05
+  assert.equal(Model.settingsMatch(monitor, { mode: "3440x1440@99.90" }), false) // 0.08 off
+  assert.equal(Model.settingsMatch(monitor, { mode: "1920x1080@99.98" }), false)
+  assert.equal(Model.settingsMatch(monitor, { scale: 1.252 }), true)
+  assert.equal(Model.settingsMatch(monitor, { scale: 1.3 }), false)
+  assert.equal(Model.settingsMatch(monitor, { transform: 0 }), true)
+  assert.equal(Model.settingsMatch(monitor, { transform: 1 }), false)
+  assert.equal(Model.settingsMatch(monitor, {}), true)
+  assert.equal(Model.settingsMatch(monitor, null), true)
+})
+
+test("settingsMatch treats vrr 2 (fullscreen-only) as always matching", () => {
+  assert.equal(Model.settingsMatch({ vrr: true }, { vrr: 2 }), true)
+  assert.equal(Model.settingsMatch({ vrr: false }, { vrr: 2 }), true)
+  assert.equal(Model.settingsMatch({ vrr: true }, { vrr: 0 }), false)
+  assert.equal(Model.settingsMatch({ vrr: false }, { vrr: 0 }), true)
+  assert.equal(Model.settingsMatch({ vrr: true }, { vrr: 1 }), true)
+  assert.equal(Model.settingsMatch({ vrr: false }, { vrr: 1 }), false)
+})
+
+test("settingsRule emits fields in a fixed order and escapes the output name", () => {
+  assert.equal(Model.settingsRule("HDMI-A-1", { vrr: 1, mode: "3440x1440@99.98", transform: 1, scale: 1.25 }),
+    'hl.monitor({ output = "HDMI-A-1", mode = "3440x1440@99.98", scale = 1.25, transform = 1, vrr = 1 })')
+  assert.match(Model.settingsRule('a"b', { mode: "1920x1080@60" }), /output = "a\\"b"/)
+  assert.equal(Model.settingsRule("HDMI-A-1", {}), "")
+  assert.equal(Model.settingsRule("HDMI-A-1", null), "")
+})
+
+test("pendingSettings looks up identical monitors by output name and skips matches", () => {
+  const a = dell("DP-1", 0) // scale 1, no serial: keyed by output name
+  const b = dell("DP-2", 1920)
+  const layout = { order: [], monitors: { "DP-1": { scale: 1.25 }, "DP-2": { scale: 1 } } }
+  const pending = Model.pendingSettings([a, b], layout)
+  assert.deepEqual(pending, [{ name: "DP-1", settings: { scale: 1.25 } }])
+})
+
+test("pendingSettings ignores disabled monitors and entries with no saved settings", () => {
+  const a = { ...dell("DP-1", 0, "S1"), disabled: true }
+  const layout = { order: [], monitors: { "Dell Inc. DELL P2419H S1": { scale: 1.25 } } }
+  assert.deepEqual(Model.pendingSettings([a], layout), [])
+  assert.deepEqual(Model.pendingSettings([dell("DP-1", 0, "S1")], { order: [], monitors: {} }), [])
+})
+
+test("settingsToLua joins rules with newlines", () => {
+  const pending = [
+    { name: "eDP-1", settings: { scale: 2 } },
+    { name: "HDMI-A-1", settings: { mode: "3440x1440@99.98" } }
+  ]
+  assert.equal(Model.settingsToLua(pending),
+    'hl.monitor({ output = "eDP-1", scale = 2 })\n' +
+    'hl.monitor({ output = "HDMI-A-1", mode = "3440x1440@99.98" })')
+})
+
+test("diagonalInches and pixelDensity compute from physical size", () => {
+  assert.equal(Model.diagonalInches(797, 333), 34)
+  assert.equal(Model.diagonalInches(0, 333), 0)
+  assert.equal(Model.diagonalInches(797, -1), 0)
+  assert.equal(Model.pixelDensity(3440, 1440, 797, 333), 110)
+  assert.equal(Model.pixelDensity(3440, 1440, 0, 0), 0)
+})
+
+test("rotationLabel names every transform value", () => {
+  assert.equal(Model.rotationLabel(0), "Normal")
+  assert.equal(Model.rotationLabel(1), "90°")
+  assert.equal(Model.rotationLabel(4), "Flipped")
+  assert.equal(Model.rotationLabel(7), "Flipped 270°")
+  assert.equal(Model.rotationLabel(99), "Normal")
+})
+
 test("tilesFromMonitors sorts by position and exposes keys", () => {
   const tiles = Model.tilesFromMonitors([ultrawide, laptop])
   assert.deepEqual(tiles.map(t => [t.name, t.key, t.w]), [
