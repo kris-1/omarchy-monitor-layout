@@ -16,6 +16,8 @@ QtObject {
   signal applied()
 
   property bool _pending: false
+  // Outputs this applier has positioned, so unplugged ones can be parked.
+  property var _knownOutputs: []
 
   function apply() {
     if (readProc.running || evalProc.running) {
@@ -43,13 +45,18 @@ QtObject {
         try { monitors = JSON.parse(parts[1] || "[]") } catch (e) { monitors = [] }
 
         var positions = LayoutModel.computePositions(monitors, order)
+        var parked = LayoutModel.parkedOutputs(root._knownOutputs, positions)
+        var known = parked.slice()
+        positions.forEach(function(p) { known.push(p.name) })
+        root._knownOutputs = known
+
         var anyChanged = positions.some(function(p) { return p.changed })
         if (!anyChanged) {
           root._finish()
           return
         }
         var staging = LayoutModel.stagingX(monitors, positions)
-        root.evalProc.command = ["hyprctl", "eval", LayoutModel.positionsToLua(positions, staging)]
+        root.evalProc.command = ["hyprctl", "eval", LayoutModel.positionsToLua(positions, staging, parked)]
         root.evalProc.running = true
       }
     }

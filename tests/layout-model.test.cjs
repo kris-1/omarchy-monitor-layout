@@ -154,6 +154,15 @@ test("staged moves never overlap, whichever way the monitors swap", () => {
   }
 })
 
+test("positionsToLua parks unplugged outputs beside the layout", () => {
+  const positions = [{ name: "eDP-1", x: 0, y: 0 }]
+  const parked = Model.parkedOutputs(["HDMI-A-1", "eDP-1"], positions)
+  assert.deepEqual(parked, ["HDMI-A-1"])
+  assert.equal(Model.positionsToLua(positions, null, parked),
+    'hl.monitor({ output = "eDP-1", position = "0x0" })\n' +
+    'hl.monitor({ output = "HDMI-A-1", position = "auto-right" })')
+})
+
 test("positionsToLua escapes quotes in output names", () => {
   assert.match(Model.positionsToLua([{ name: 'a"b', x: 0, y: 0 }]), /output = "a\\"b"/)
 })

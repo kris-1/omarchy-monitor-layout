@@ -6,6 +6,16 @@ All notable changes to this project are documented here. The format follows
 
 ## [Unreleased]
 
+## [0.4.2] - 2026-09-26
+
+### Fixed
+
+- Plugging a monitor back in no longer triggers Hyprland's "monitor layout
+  overlaps" warning. Hyprland kept the monitor's last position rule, a spot
+  the compacted layout could now occupy; unplugged monitors are now parked at
+  `auto-right`, so they return beside the layout and are then moved into
+  place.
+
 ## [0.4.1] - 2026-09-26
 
 ### Fixed

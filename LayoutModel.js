@@ -159,7 +159,13 @@ function positionRule(name, x, y) {
 // B's spot while B is still there), which triggers Hyprland's "monitor layout
 // overlaps" warning. With `staging`, every monitor first moves past the right
 // edge of both layouts, then into place, so no intermediate state overlaps.
-function positionsToLua(positions, staging) {
+//
+// `parked` lists outputs that were positioned before but are unplugged now.
+// Hyprland keeps their last rule, so a monitor plugged back in would land on
+// its old spot, which the compacted layout may now occupy, and trigger the same
+// warning before the service can move it. Parking them at "auto-right" makes a
+// returning monitor appear beside the layout instead.
+function positionsToLua(positions, staging, parked) {
   var lines = []
   if (staging !== undefined && staging !== null) {
     for (var i = 0; i < positions.length; i++)
@@ -167,7 +173,16 @@ function positionsToLua(positions, staging) {
   }
   for (var j = 0; j < positions.length; j++)
     lines.push(positionRule(positions[j].name, positions[j].x, positions[j].y))
+  for (var k = 0; k < (parked || []).length; k++)
+    lines.push("hl.monitor({ output = " + luaString(parked[k]) + ", position = \"auto-right\" })")
   return lines.join("\n")
+}
+
+// Outputs from `known` that are not placed by `positions`, i.e. unplugged.
+function parkedOutputs(known, positions) {
+  var placed = {}
+  for (var i = 0; i < positions.length; i++) placed[positions[i].name] = true
+  return (known || []).filter(function(name) { return !placed[name] })
 }
 
 function moveItem(list, from, to) {
@@ -237,6 +252,7 @@ if (typeof module !== "undefined") {
     computePositions: computePositions,
     stagingX: stagingX,
     positionsToLua: positionsToLua,
+    parkedOutputs: parkedOutputs,
     moveItem: moveItem,
     dropIndex: dropIndex,
     tilesFromMonitors: tilesFromMonitors
