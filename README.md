@@ -158,18 +158,17 @@ using each display's logical width. Disabled and mirrored outputs are skipped.
 
 ## Development
 
-```bash
-git clone https://github.com/kris-1/omarchy-monitor-layout.git
-cd omarchy-monitor-layout
+From a working copy of this repository:
 
-scripts/check.sh                 # unit tests + manifest validation
-scripts/dev-install.sh --enable  # copy into ~/.config/omarchy/plugins, swap in for Display, restart the shell
+```bash
+scripts/check.sh                # unit tests + manifest validation
+scripts/dev-sync.sh --enable    # copy into ~/.config/omarchy/plugins, swap in for Display, restart the shell
 ```
 
-If you keep your own Display clone, `scripts/dev-install.sh --service-only`
+If you keep your own Display clone, `scripts/dev-sync.sh --service-only`
 installs just the layout service, without the widget.
 
-`scripts/dev-install.sh` restarts `omarchy-shell` because the plugin hot-reload
+`scripts/dev-sync.sh` restarts `omarchy-shell` because the plugin hot-reload
 can keep a stale copy of the QML cached. `scripts/check.sh` also runs
 `qmllint` when it is available (only syntax errors fail; warnings about the
 shell's `qs.*` modules are expected outside `omarchy-shell`).

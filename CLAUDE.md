@@ -32,7 +32,7 @@ for Hyprland, and nothing else. See README.md for the user-facing description.
 
 - `scripts/check.sh` — unit tests, manifest validation and `qmllint` (CI runs
   the first two; qmllint needs a local Omarchy install).
-- `scripts/dev-install.sh [--enable|--service-only]` — copy into
+- `scripts/dev-sync.sh [--enable|--service-only]` — copy into
   `~/.config/omarchy/plugins/monitor-layout/` and restart the shell.
   A restart is required: plugin hot-reload can serve stale QML.
 - Shell log: `/run/user/$UID/quickshell/by-id/*/log.log`.

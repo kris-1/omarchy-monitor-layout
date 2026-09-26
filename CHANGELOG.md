@@ -35,7 +35,7 @@ All notable changes to this project are documented here. The format follows
   `clonedFrom: omarchy.monitor`: enabling the plugin replaces the built-in
   Display widget, `SUPER + CTRL + D` opens it, and disabling the plugin
   restores the built-in one. The separate bar button is gone.
-- `scripts/dev-install.sh --service-only` installs only the layout service
+- `scripts/dev-sync.sh --service-only` installs only the layout service
   for setups with their own Display clone.
 
 ## [0.3.1] - 2026-09-26

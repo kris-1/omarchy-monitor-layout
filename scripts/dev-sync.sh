@@ -2,9 +2,9 @@
 # Copy the working tree into the local Omarchy plugin directory and restart the
 # shell so the change is picked up (plugin hot-reload can keep stale QML cached).
 #
-#   scripts/dev-install.sh                 install/update and restart the shell
-#   scripts/dev-install.sh --enable        also enable it in place of the built-in Display
-#   scripts/dev-install.sh --service-only  run only the layout service, without the
+#   scripts/dev-sync.sh                 install/update and restart the shell
+#   scripts/dev-sync.sh --enable        also enable it in place of the built-in Display
+#   scripts/dev-sync.sh --service-only  run only the layout service, without the
 #                                          widget, next to your own Display widget
 #
 # --service-only drops omarchy.clonedFrom from the installed copy, so your own
@@ -20,8 +20,8 @@ SHELL_CONFIG="$HOME/.config/omarchy/shell.json"
 MODE="${1:-}"
 
 if [[ -d $TARGET/.git ]]; then
-  echo "dev-install: $TARGET is a git checkout (installed with 'omarchy plugin add')." >&2
-  echo "dev-install: remove it with 'omarchy plugin remove $ID' first." >&2
+  echo "dev-sync: $TARGET is a git checkout (installed with 'omarchy plugin add')." >&2
+  echo "dev-sync: remove it with 'omarchy plugin remove $ID' first." >&2
   exit 1
 fi
 
