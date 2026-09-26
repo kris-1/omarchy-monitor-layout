@@ -1,0 +1,24 @@
+{
+  "schemaVersion": 1,
+  "id": "monitor-layout",
+  "name": "Monitor Layout",
+  "version": "0.3.0",
+  "author": "Krzysztof Golab Magalhaes",
+  "description": "Drag-and-drop monitor arrangement that survives hotplug and config reloads",
+  "kinds": [
+    "service",
+    "bar-widget"
+  ],
+  "keepLoaded": true,
+  "entryPoints": {
+    "service": "Service.qml",
+    "barWidget": "Panel.qml"
+  },
+  "barWidget": {
+    "displayName": "Monitor Layout",
+    "description": "Drag displays into the order they stand on your desk",
+    "category": "System",
+    "allowMultiple": false,
+    "defaultSection": "right"
+  }
+}
