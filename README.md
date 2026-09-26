@@ -157,10 +157,10 @@ The layout lives in `~/.config/omarchy/monitor-layout.json`:
 {
   "order": [
     "Lenovo Group Limited 0x8AB1",
-    "AOC U34V5C WQVP7HA000383"
+    "AOC U34V5C XYZ1234567890"
   ],
   "monitors": {
-    "AOC U34V5C WQVP7HA000383": { "mode": "3440x1440@99.98", "scale": 1, "vrr": 1 }
+    "AOC U34V5C XYZ1234567890": { "mode": "3440x1440@99.98", "scale": 1, "vrr": 1 }
   }
 }
 ```

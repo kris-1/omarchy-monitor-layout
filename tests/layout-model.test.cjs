@@ -11,7 +11,7 @@ const laptop = {
 }
 const ultrawide = {
   name: "HDMI-A-1",
-  description: "AOC U34V5C WQVP7HA000383",
+  description: "AOC U34V5C XYZ1234567890",
   width: 3440, height: 1440, scale: 1, transform: 0,
   x: 1536, y: 0, focused: false, disabled: false, mirrorOf: "none"
 }
@@ -371,7 +371,7 @@ test("tilesFromMonitors sorts by position and exposes keys", () => {
   const tiles = Model.tilesFromMonitors([ultrawide, laptop])
   assert.deepEqual(tiles.map(t => [t.name, t.key, t.w]), [
     ["eDP-1", "Lenovo Group Limited 0x8AB1", 1536],
-    ["HDMI-A-1", "AOC U34V5C WQVP7HA000383", 3440]
+    ["HDMI-A-1", "AOC U34V5C XYZ1234567890", 3440]
   ])
   assert.equal(tiles[0].internal, true)
   assert.equal(tiles[0].focused, true)
