@@ -2,14 +2,22 @@
 # Copy the working tree into the local Omarchy plugin directory and restart the
 # shell so the change is picked up (plugin hot-reload can keep stale QML cached).
 #
-#   scripts/dev-install.sh           install/update and restart the shell
-#   scripts/dev-install.sh --enable  also enable the plugin (bar: right section)
+#   scripts/dev-install.sh                 install/update and restart the shell
+#   scripts/dev-install.sh --enable        also enable it in place of the built-in Display
+#   scripts/dev-install.sh --service-only  run only the layout service, without the
+#                                          widget, next to your own Display widget
+#
+# --service-only drops omarchy.clonedFrom from the installed copy, so your own
+# Display widget stays the only clone of omarchy.monitor: with two clones the
+# shell picks one of them for the Display shortcut (SUPER+CTRL+D).
 
 set -euo pipefail
 
 ROOT="$(cd "$(dirname "${BASH_SOURCE[0]}")/.." && pwd)"
 ID="$(jq -r '.id' "$ROOT/manifest.json")"
 TARGET="$HOME/.config/omarchy/plugins/$ID"
+SHELL_CONFIG="$HOME/.config/omarchy/shell.json"
+MODE="${1:-}"
 
 if [[ -d $TARGET/.git ]]; then
   echo "dev-install: $TARGET is a git checkout (installed with 'omarchy plugin add')." >&2
@@ -25,10 +33,22 @@ rsync -a --delete \
   "$ROOT/" "$TARGET/"
 echo "Installed $ID into $TARGET"
 
-if [[ ${1:-} == --enable ]]; then
-  # The shell has to discover a newly copied plugin before it can be enabled.
-  omarchy-shell shell rescanPlugins >/dev/null
-  omarchy plugin enable "$ID" --section right
-fi
+case "$MODE" in
+  --enable)
+    # The shell has to discover a newly copied plugin before it can be enabled.
+    omarchy-shell shell rescanPlugins >/dev/null
+    omarchy plugin enable "$ID"
+    ;;
+  --service-only)
+    tmp=$(mktemp)
+    jq 'del(.omarchy)' "$TARGET/manifest.json" > "$tmp" && mv "$tmp" "$TARGET/manifest.json"
+    tmp=$(mktemp)
+    jq --arg id "$ID" '
+      .plugins = (((.plugins // []) | map(select(.id != $id))) + [{ id: $id }])
+      | if .bar.layout then .bar.layout |= map_values(map(select(.id != $id))) else . end
+    ' "$SHELL_CONFIG" > "$tmp" && mv "$tmp" "$SHELL_CONFIG"
+    echo "Enabled $ID as a service only (no bar widget)"
+    ;;
+esac
 
 omarchy restart shell

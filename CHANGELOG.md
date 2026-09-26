@@ -6,6 +6,18 @@ All notable changes to this project are documented here. The format follows
 
 ## [Unreleased]
 
+## [0.4.0] - 2026-09-26
+
+### Changed
+
+- The widget is again a copy of Omarchy's Display widget with the
+  ARRANGEMENT section as its only addition, and it declares
+  `clonedFrom: omarchy.monitor`: enabling the plugin replaces the built-in
+  Display widget, `SUPER + CTRL + D` opens it, and disabling the plugin
+  restores the built-in one. The separate bar button is gone.
+- `scripts/dev-install.sh --service-only` installs only the layout service
+  for setups with their own Display clone.
+
 ## [0.3.1] - 2026-09-26
 
 ### Changed

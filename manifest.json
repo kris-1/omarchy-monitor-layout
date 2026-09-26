@@ -1,11 +1,11 @@
 {
   "schemaVersion": 1,
   "id": "monitor-layout",
-  "name": "Monitor Layout",
-  "version": "0.3.1",
+  "name": "Display with Monitor Layout",
+  "version": "0.4.0",
   "author": "Krzysztof Golab Magalhaes",
   "license": "MIT",
-  "description": "Drag-and-drop monitor arrangement that survives hotplug and config reloads",
+  "description": "Omarchy's Display widget with one addition: drag-and-drop monitor arrangement that survives hotplug and config reloads",
   "kinds": [
     "service",
     "bar-widget"
@@ -16,10 +16,13 @@
     "barWidget": "Panel.qml"
   },
   "barWidget": {
-    "displayName": "Monitor Layout",
-    "description": "Drag displays into the order they stand on your desk",
+    "displayName": "Display",
+    "description": "Brightness, text size, scale, displays and drag-and-drop monitor arrangement",
     "category": "System",
     "allowMultiple": false,
     "defaultSection": "right"
+  },
+  "omarchy": {
+    "clonedFrom": "omarchy.monitor"
   }
 }

@@ -12,12 +12,18 @@ for Hyprland, and nothing else. See README.md for the user-facing description.
 - QML follows the style of Omarchy's first-party panels
   (`/usr/share/omarchy/shell/plugins/panels/*`): `qs.Ui` components,
   `Style`/`Color` tokens from `qs.Commons`, no hard-coded colors or sizes.
-- Scope is monitor positioning only; do not add unrelated display settings.
-- The long-term goal is an upstream merge into Omarchy's Display widget
-  (`shell/plugins/panels/monitor/Panel.qml`). Keep `Arrangement.qml`
-  self-contained, with `bar`, `active`, `focused`, `cursorActive`,
-  `moveCursor()`, `activate()` and `focusRequested` as its API, so the merge
-  stays a small wiring change.
+- Scope: Omarchy's Display widget plus monitor positioning, nothing else.
+  `Panel.qml` and `Model.js` are copies of Omarchy's
+  `shell/plugins/panels/monitor/` (see NOTICE). Keep their diff against
+  upstream limited to the `arrangement` wiring so upstream changes can be
+  merged; put new UI in `Arrangement.qml`.
+- `omarchy.clonedFrom: omarchy.monitor` stays in the manifest on purpose (it
+  makes the plugin replace the built-in Display widget and receive its
+  shortcut), although the marketplace guide suggests removing it for plugins
+  that merely started as clones.
+- The long-term goal is an upstream merge of `Arrangement.qml` into Omarchy's
+  Display widget. Keep it self-contained, with `bar`, `active`, `focused`,
+  `cursorActive`, `moveCursor()`, `activate()` and `focusRequested` as its API.
 - Never edit `/usr/share/omarchy/`; read it for reference only.
 - The plugin must pass `omarchy plugin validate`: no symlinks, relative entry
   points, id outside the reserved `omarchy.*` namespace.
@@ -26,7 +32,7 @@ for Hyprland, and nothing else. See README.md for the user-facing description.
 
 - `scripts/check.sh` — unit tests, manifest validation and `qmllint` (CI runs
   the first two; qmllint needs a local Omarchy install).
-- `scripts/dev-install.sh [--enable]` — copy into
+- `scripts/dev-install.sh [--enable|--service-only]` — copy into
   `~/.config/omarchy/plugins/monitor-layout/` and restart the shell.
   A restart is required: plugin hot-reload can serve stale QML.
 - Shell log: `/run/user/$UID/quickshell/by-id/*/log.log`.
