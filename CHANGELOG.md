@@ -6,9 +6,22 @@ All notable changes to this project are documented here. The format follows
 
 ## [Unreleased]
 
+## [0.6.0] - 2026-09-26
+
+### Added
+
+- Identify: a button under the preview shows a large number and name in the
+  corner of every screen for a few seconds, matching the numbers now shown
+  on the tiles. The display whose settings window is open keeps its badge.
+- Applied changes are checked against what the display reports. A change
+  Hyprland refused or replaced (for example adaptive sync on a display
+  without it, or a scale it rounded) is reverted at once with a message,
+  instead of asking to keep it.
+
 ### Changed
 
 - `preview.png` shows the settings window next to the panel.
+- The DISPLAY SETTINGS hint moved below the preview, next to Identify.
 
 ## [0.5.1] - 2026-09-26
 

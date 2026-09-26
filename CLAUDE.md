@@ -18,7 +18,7 @@ for Hyprland, and nothing else. See README.md for the user-facing description.
   `shell/plugins/panels/monitor/` (see NOTICE). Keep their diff against
   upstream limited to the `arrangement` wiring so upstream changes can be
   merged; put new UI in `Arrangement.qml` (and the windows it opens,
-  `MonitorProperties.qml`, `KeepSettingsDialog.qml`).
+  `MonitorProperties.qml`, `KeepSettingsDialog.qml`, `IdentifyOverlay.qml`).
 - `omarchy.clonedFrom: omarchy.monitor` stays in the manifest on purpose (it
   makes the plugin replace the built-in Display widget and receive its
   shortcut), although the marketplace guide suggests removing it for plugins
@@ -26,7 +26,7 @@ for Hyprland, and nothing else. See README.md for the user-facing description.
 - The long-term goal is an upstream merge of `Arrangement.qml` into Omarchy's
   Display widget. Keep it self-contained, with `bar`, `active`, `focused`,
   `cursorActive`, `panel`, `moveCursor()`, `activate()`, `showProperties()`,
-  `forgetSetting()` and `focusRequested` as its API.
+  `identify()`, `forgetSetting()` and `focusRequested` as its API.
 - Never edit `/usr/share/omarchy/`; read it for reference only.
 - The plugin must pass `omarchy plugin validate`: no symlinks, relative entry
   points, id outside the reserved `omarchy.*` namespace.

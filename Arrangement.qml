@@ -42,6 +42,8 @@ Column {
   property var tiles: []
   // Raw `hyprctl monitors -j` output behind the tiles.
   property var monitors: []
+  // Outputs showing their Identify badge (see identify()).
+  property var identifyOutputs: []
   // Output shown in the properties window ("" = closed).
   property string propertiesOutput: ""
   readonly property var propertiesTile: {
@@ -87,6 +89,12 @@ Column {
     grabbedIndex = grabbedIndex >= 0 ? -1 : selectedIndex
   }
 
+  // Identify: number every display on its screen for a few seconds.
+  function identify() {
+    identifyOutputs = tiles.map(function(tile) { return tile.name })
+    identifyTimer.restart()
+  }
+
   // I: open the properties of the tile under the cursor.
   function showProperties() {
     if (!available || grabbedIndex >= 0 || !tiles[selectedIndex]) return
@@ -118,7 +126,10 @@ Column {
 
   onActiveChanged: {
     grabbedIndex = -1
-    if (!active) propertiesOutput = ""
+    if (!active) {
+      propertiesOutput = ""
+      identifyOutputs = []
+    }
     if (active) {
       selectedIndex = 0
       refresh()
@@ -217,34 +228,10 @@ Column {
     onTriggered: root.refresh()
   }
 
-  Item {
-    width: parent.width
-    implicitHeight: Math.max(header.implicitHeight, hint.implicitHeight)
-
-    PanelSectionHeader {
-      id: header
-      text: "DISPLAY SETTINGS"
-      foreground: root.bar.foreground
-      fontFamily: root.bar.fontFamily
-      anchors.left: parent.left
-      anchors.verticalCenter: parent.verticalCenter
-    }
-
-    Text {
-      id: hint
-      textFormat: Text.PlainText
-      text: root.grabbedIndex >= 0 ? "H/L TO MOVE · ENTER TO DROP"
-        : root.cursorActive && root.focused
-          ? (root.reorderable ? "ENTER TO PICK UP · I FOR SETTINGS" : "ENTER FOR SETTINGS")
-        : root.reorderable ? "DRAG · DOUBLE-CLICK FOR SETTINGS" : "DOUBLE-CLICK FOR SETTINGS"
-      color: Qt.darker(root.bar.foreground, 1.4)
-      font.family: root.bar.fontFamily
-      font.pixelSize: Style.font.caption
-      font.bold: true
-      anchors.right: parent.right
-      anchors.rightMargin: Style.space(6)
-      anchors.verticalCenter: parent.verticalCenter
-    }
+  PanelSectionHeader {
+    text: "DISPLAY SETTINGS"
+    foreground: root.bar.foreground
+    fontFamily: root.bar.fontFamily
   }
 
   CursorSurface {
@@ -324,6 +311,7 @@ Column {
           height: modelData.h * canvas.unit
           icon: modelData.internal ? "󰌢" : "󰍹"
           label: modelData.label
+          number: index + 1
           highlighted: modelData.focused
           grabbed: dragged || root.grabbedIndex === index
           hasCursor: root.cursorActive && root.focused && root.selectedIndex === index
@@ -367,6 +355,66 @@ Column {
     }
   }
 
+  Item {
+    width: parent.width
+    implicitHeight: Math.max(hint.implicitHeight, identifyButton.implicitHeight)
+
+    Text {
+      id: hint
+      textFormat: Text.PlainText
+      text: root.grabbedIndex >= 0 ? "H/L TO MOVE · ENTER TO DROP"
+        : root.cursorActive && root.focused
+          ? (root.reorderable ? "ENTER TO PICK UP · I FOR SETTINGS" : "ENTER FOR SETTINGS")
+        : root.reorderable ? "DRAG · DOUBLE-CLICK FOR SETTINGS" : "DOUBLE-CLICK FOR SETTINGS"
+      color: Qt.darker(root.bar.foreground, 1.4)
+      font.family: root.bar.fontFamily
+      font.pixelSize: Style.font.caption
+      font.bold: true
+      elide: Text.ElideRight
+      anchors.left: parent.left
+      anchors.right: identifyButton.left
+      anchors.rightMargin: Style.space(10)
+      anchors.verticalCenter: parent.verticalCenter
+    }
+
+    Button {
+      id: identifyButton
+      text: "Identify"
+      fontSize: Style.font.caption
+      foreground: root.bar.foreground
+      fontFamily: root.bar.fontFamily
+      horizontalPadding: Style.spacing.md
+      verticalPadding: Style.spacing.controlPaddingY
+      bordered: true
+      active: root.identifyOutputs.length > 0
+      anchors.right: parent.right
+      anchors.verticalCenter: parent.verticalCenter
+      onClicked: root.identify()
+    }
+  }
+
+  // Numbers the displays on their screens: all of them for a moment after
+  // Identify, and the one whose settings window is open.
+  IdentifyOverlay {
+    foreground: root.bar.foreground
+    fontFamily: root.bar.fontFamily
+    entries: {
+      var list = []
+      for (var i = 0; i < root.tiles.length; i++) {
+        var tile = root.tiles[i]
+        if (root.identifyOutputs.indexOf(tile.name) === -1 && tile.name !== root.propertiesOutput) continue
+        list.push({ output: tile.name, number: i + 1, label: tile.internal ? "Built-in display" : tile.label })
+      }
+      return root.active ? list : []
+    }
+  }
+
+  Timer {
+    id: identifyTimer
+    interval: 3000
+    onTriggered: root.identifyOutputs = []
+  }
+
   // One display in the preview. highlighted = focused display (accent border);
   // grabbed = being dragged or picked up with Enter (filled); hasCursor =
   // keyboard cursor (thicker outline).
@@ -374,6 +422,7 @@ Column {
     id: tile
     property string icon: ""
     property string label: ""
+    property int number: 0
     property bool highlighted: false
     property bool grabbed: false
     property bool hasCursor: false
@@ -385,6 +434,20 @@ Column {
     color: grabbed ? Style.selectedFillFor(root.bar.foreground, Color.accent) : faint
     border.width: hasCursor ? 2 : 1
     border.color: hasCursor ? root.bar.foreground : (highlighted ? Color.accent : line)
+
+    // Matches the number Identify shows on the screen.
+    Text {
+      textFormat: Text.PlainText
+      text: tile.number > 0 ? String(tile.number) : ""
+      color: Qt.darker(root.bar.foreground, 1.4)
+      font.family: root.bar.fontFamily
+      font.pixelSize: Style.font.caption
+      font.bold: true
+      anchors.left: parent.left
+      anchors.top: parent.top
+      anchors.leftMargin: Style.space(6)
+      anchors.topMargin: Style.space(4)
+    }
 
     Column {
       anchors.centerIn: parent

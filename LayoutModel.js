@@ -270,6 +270,18 @@ function settingsMatch(monitor, settings) {
   return true
 }
 
+// Fields of `settings` the live `monitor` does not show after they were
+// applied, i.e. the ones Hyprland refused or replaced. [] when all took.
+function rejectedFields(monitor, settings) {
+  var fields = ["mode", "scale", "transform", "vrr"]
+  return fields.filter(function(field) {
+    if (!settings || settings[field] === undefined) return false
+    var one = {}
+    one[field] = settings[field]
+    return !settingsMatch(monitor, one)
+  })
+}
+
 // hl.monitor({ output = ..., mode = ..., scale = ..., transform = ..., vrr = ... })
 // with only the fields present in `settings`, in that fixed order. "" when
 // `settings` has none.
@@ -515,6 +527,7 @@ if (typeof module !== "undefined") {
     refreshOptions: refreshOptions,
     liveSettings: liveSettings,
     settingsMatch: settingsMatch,
+    rejectedFields: rejectedFields,
     settingsRule: settingsRule,
     pendingSettings: pendingSettings,
     settingsToLua: settingsToLua,

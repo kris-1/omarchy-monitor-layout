@@ -66,6 +66,11 @@ PanelWindow {
   property var trialBefore: null
   property var trialChanges: null
   property int countdown: 0
+  // Between Apply and the dialog: checking that the display took the change.
+  property bool verifying: false
+  property bool _verifyAfterRun: false
+  // Why the last change was reverted without asking ("" = nothing to say).
+  property string rejectMessage: ""
   readonly property bool trying: trialBefore !== null
 
   // Keyboard cursor: a row from `rows` and a column within it.
@@ -132,6 +137,7 @@ PanelWindow {
   function stageResolution(value) {
     var mode = LayoutModel.parseMode(value)
     if (!mode) return
+    rejectMessage = ""
     stagedWidth = mode.width
     stagedHeight = mode.height
     var rates = refreshRates.map(function(option) { return option.value })
@@ -157,8 +163,9 @@ PanelWindow {
     trialBefore = before
     trialChanges = changes
     if (changes.vrr !== undefined) currentVrr = changes.vrr
-    countdown = trialSeconds
-    countdownTimer.restart()
+    verifying = true
+    rejectMessage = ""
+    _verifyAfterRun = true
     run(LayoutModel.settingsRule(monitor.name, changes))
     cursorCol = 1
   }
@@ -176,6 +183,7 @@ PanelWindow {
     if (!trying) return
     var before = trialBefore
     countdownTimer.stop()
+    verifying = false
     trialBefore = null
     trialChanges = null
     if (before.vrr !== undefined) currentVrr = before.vrr
@@ -259,6 +267,7 @@ PanelWindow {
 
   function choose(row, value) {
     if (trying) return
+    rejectMessage = ""
     if (row === "refresh") stagedRefresh = value
     else if (row === "scale") stagedScale = Number(Model.cleanScale(value, stagedWidth, stagedHeight)) || Number(value)
     else if (row === "rotation") stagedTransform = Number(value)
@@ -275,8 +284,31 @@ PanelWindow {
     return cursorActive && rows[cursorRow] === row && (col === undefined || cursorCol === col)
   }
 
+  // Hyprland refuses or replaces what a display cannot do without failing
+  // the call, so the live state is compared with what was asked for.
+  function verifyTrial(monitors) {
+    if (!trying || !monitor) return
+    verifying = false
+    var live = null
+    for (var i = 0; i < monitors.length; i++)
+      if (monitors[i].name === monitor.name) live = monitors[i]
+    var rejected = live ? LayoutModel.rejectedFields(live, trialChanges) : ["mode"]
+    if (rejected.length === 0) {
+      countdown = trialSeconds
+      countdownTimer.restart()
+      return
+    }
+    var names = { mode: "mode", scale: "scale", transform: "rotation", vrr: "adaptive sync" }
+    revert()
+    rejectMessage = "THE DISPLAY DID NOT ACCEPT THIS " + rejected.map(function(field) {
+      return names[field]
+    }).join(" AND ").toUpperCase()
+  }
+
   onOpenChanged: {
     if (open) {
+      rejectMessage = ""
+      verifying = false
       trialBefore = null
       trialChanges = null
       stageLive()
@@ -298,7 +330,7 @@ PanelWindow {
 
   KeepSettingsDialog {
     screen: root.screen
-    open: root.open && root.trying
+    open: root.open && root.trying && !root.verifying
     seconds: root.countdown
     totalSeconds: root.trialSeconds
     foreground: root.foreground
@@ -323,12 +355,36 @@ PanelWindow {
     }
   }
 
+  // Give the display a moment to switch before reading its state back.
+  Timer {
+    id: verifyDelay
+    interval: 600
+    onTriggered: if (!verifyProc.running) verifyProc.running = true
+  }
+
+  Process {
+    id: verifyProc
+    command: ["hyprctl", "monitors", "-j"]
+    stdout: StdioCollector {
+      waitForEnd: true
+      onStreamFinished: {
+        var monitors = []
+        try { monitors = JSON.parse(String(text || "[]")) } catch (e) { monitors = [] }
+        root.verifyTrial(monitors)
+      }
+    }
+  }
+
   Process {
     id: evalProc
     stdout: StdioCollector { waitForEnd: true }
     onRunningChanged: {
       if (running) return
       root.settingsApplied()
+      if (root._verifyAfterRun && root._queue.length === 0) {
+        root._verifyAfterRun = false
+        verifyDelay.restart()
+      }
       root._runNext()
     }
   }
@@ -586,9 +642,11 @@ PanelWindow {
             anchors.right: actions.left
             anchors.rightMargin: Style.space(10)
             anchors.verticalCenter: parent.verticalCenter
-            text: root.trying ? "WAITING FOR CONFIRMATION"
+            text: root.verifying ? "APPLYING…"
+              : root.trying ? "WAITING FOR CONFIRMATION"
+              : root.rejectMessage !== "" ? root.rejectMessage
               : root.dirty ? "NOT APPLIED YET" : "ESC TO CLOSE"
-            color: root.trying ? Color.accent : root.muted
+            color: root.trying ? Color.accent : root.rejectMessage !== "" ? Color.urgent : root.muted
             font.family: root.fontFamily
             font.pixelSize: Style.font.caption
             font.bold: true

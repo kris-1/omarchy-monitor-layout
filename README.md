@@ -36,11 +36,15 @@ sits to the right of your laptop but the pointer has to leave through the
 - **Display properties.** Double-click a tile for a window with what the
   display reports (make, model, serial, port, size, pixel density) and its
   resolution, refresh rate, scale, rotation and adaptive sync (VRR).
-- **Changes you can take back.** Apply tries a change right away and asks
-  *Keep these display settings?*; without an answer within 30 seconds the
-  display goes back to its previous settings, so a mode it cannot show never
-  sticks. Kept settings are remembered per display and restored after
+- **Changes you can take back.** Apply tries a change right away, checks that
+  the display really took it (a refused or rounded setting is reverted at once
+  with a message) and asks *Keep these display settings?*; without an answer
+  within 30 seconds the display goes back to its previous settings, so a mode
+  it cannot show never sticks. Kept settings are remembered per display and restored after
   reconnects and reloads.
+- **Identify.** Shows a large number and name in the corner of every screen,
+  matching the numbers on the tiles; the display being edited keeps its
+  badge while its settings window is open.
 - **Keyboard friendly.** In the DISPLAY SETTINGS section `h`/`l` choose a display,
   `Enter` picks it up, `h`/`l` move it, `Enter` drops it, `I` opens its
   properties.
@@ -86,6 +90,7 @@ omarchy plugin update monitor-layout
    press **Apply**. Confirm with **Keep changes** within 30 seconds, or the
    previous settings come back. `j`/`k`/`h`/`l` and `Enter` work here too;
    `Esc` closes the window.
+5. Not sure which tile is which screen? Press **Identify** under the preview.
 
 The layout and kept settings survive reconnecting a display, docking and
 reloading Hyprland.
@@ -125,7 +130,7 @@ The plugin is built so that it can be merged upstream with little effort:
 
 - `Arrangement.qml` is a self-contained section with a small API (`bar`,
   `active`, `focused`, `cursorActive`, `panel`, `moveCursor()`, `activate()`,
-  `showProperties()`, `forgetSetting()`, `focusRequested`), and it brings its
+  `showProperties()`, `identify()`, `forgetSetting()`, `focusRequested`), and it brings its
   own properties window. Dropping it between SCALE and DISPLAYS in
   [`shell/plugins/panels/monitor/Panel.qml`](https://github.com/omacom/omarchy/blob/quattro/shell/plugins/panels/monitor/Panel.qml)
   and adding an `"arrangement"`
@@ -147,6 +152,7 @@ here or in the Omarchy discussions.
 | `Arrangement.qml` | The DISPLAY SETTINGS section: live preview, drag-and-drop, keyboard control. Saves the order and applies it immediately. Embeddable in any panel. |
 | `MonitorProperties.qml` | The properties window opened from a tile: details, resolution, refresh rate, scale, rotation, adaptive sync; tries changes before they are kept. |
 | `KeepSettingsDialog.qml` | The modal *Keep these display settings?* countdown. |
+| `IdentifyOverlay.qml` | The Identify badges, one click-through card per screen. |
 | `Service.qml` | Always-loaded service. Re-applies the saved layout on `monitoradded`, `monitorremoved` and `configreloaded`, and when the order file changes. |
 | `LayoutApplier.qml` | Reads the layout and `hyprctl monitors -j`, restores kept settings that have drifted, then moves the displays in one `hyprctl eval` call — only when something is out of place. |
 | `LayoutModel.js` | Pure logic (sorting, positions, staging, drop target, modes, settings rules), unit tested with Node. |

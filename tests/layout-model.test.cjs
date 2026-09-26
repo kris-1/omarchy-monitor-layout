@@ -376,3 +376,11 @@ test("tilesFromMonitors sorts by position and exposes keys", () => {
   assert.equal(tiles[0].internal, true)
   assert.equal(tiles[0].focused, true)
 })
+
+test("rejectedFields names the settings the display did not take", () => {
+  const monitor = { width: 3440, height: 1440, refreshRate: 99.982, scale: 1, transform: 0, vrr: false }
+  assert.deepEqual(Model.rejectedFields(monitor, { mode: "3440x1440@99.98", scale: 1 }), [])
+  assert.deepEqual(Model.rejectedFields(monitor, { mode: "2560x1080@60", scale: 1.25, vrr: 1 }), ["mode", "scale", "vrr"])
+  assert.deepEqual(Model.rejectedFields(monitor, { transform: 0, vrr: 2 }), [])
+  assert.deepEqual(Model.rejectedFields(monitor, null), [])
+})
