@@ -2,7 +2,7 @@
   "schemaVersion": 1,
   "id": "monitor-layout",
   "name": "Display with Monitor Layout",
-  "version": "0.7.0",
+  "version": "0.7.1",
   "author": "Krzysztof Golab Magalhaes",
   "license": "MIT",
   "description": "Omarchy's Display widget with drag-and-drop monitor arrangement and per-display properties (resolution, refresh rate, scale, rotation, VRR) that survive hotplug and config reloads",

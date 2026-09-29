@@ -6,6 +6,8 @@ All notable changes to this project are documented here. The format follows
 
 ## [Unreleased]
 
+## [0.7.1] - 2026-09-29
+
 ### Fixed
 
 - Turning a display off or on in DISPLAYS works again on Hyprland 0.55+
