@@ -778,6 +778,26 @@ function tilesFromMonitors(monitors, stack) {
   return list
 }
 
+// The Display panel's DISPLAYS rows with one output switched on or off, before
+// omarchy-monitor-state reports it: { displays, enabledDisplayCount }, as
+// Model.parseDisplays returns. The list and the changed row are copies.
+function withDisplayEnabled(displays, name, enabled) {
+  var list = []
+  var count = 0
+  for (var i = 0; i < (displays || []).length; i++) {
+    var display = displays[i]
+    if (display && display.name === name) {
+      var copy = {}
+      for (var field in display) copy[field] = display[field]
+      copy.enabled = enabled
+      display = copy
+    }
+    if (display && display.enabled) count++
+    list.push(display)
+  }
+  return { displays: list, enabledDisplayCount: count }
+}
+
 if (typeof module !== "undefined") {
   module.exports = {
     monitorKey: monitorKey,
@@ -824,6 +844,7 @@ if (typeof module !== "undefined") {
     parkedOutputs: parkedOutputs,
     moveItem: moveItem,
     dropIndex: dropIndex,
-    tilesFromMonitors: tilesFromMonitors
+    tilesFromMonitors: tilesFromMonitors,
+    withDisplayEnabled: withDisplayEnabled
   }
 }

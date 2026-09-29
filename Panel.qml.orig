@@ -5,17 +5,11 @@ import Quickshell.Io
 import qs.Ui
 import qs.Commons
 import "Model.js" as Model
-import "LayoutModel.js" as LayoutModel
 
 // Omarchy's Display panel (shell/plugins/panels/monitor/Panel.qml, MIT, see
 // NOTICE), unchanged except for the ARRANGEMENT section (Arrangement.qml)
 // between SCALE and DISPLAYS. Every change is marked "arrangement"; keep the
 // rest identical to upstream so updates can be merged.
-//
-// Also carries omacom/omarchy#7036 (display toggle through hyprctl eval, in
-// toggleDisplay, warnRefusedAction and actionProc; Model.js has its helpers)
-// until it is merged upstream, plus an immediate DISPLAYS row update marked
-// "toggle".
 Panel {
   id: root
   moduleName: "omarchy.monitor"
@@ -34,9 +28,6 @@ Panel {
   property bool internalEnabled: false
   property bool mirrorEnabled: false
   property string monitorScale: ""
-  // toggle: bumped when a display is switched on or off, so a state read that
-  // started before the change cannot put the old row back.
-  property int displayChanges: 0
   property var displays: []
   property int enabledDisplayCount: 0
 
@@ -325,22 +316,7 @@ Panel {
     if (!name) return
     if (enabled && root.enabledDisplayCount <= 1) return
 
-    var command = Model.displayToggleCommand(name, enabled, root.internalMonitor)
-    if (!command) return
-
-    // toggle: one switch at a time. A running actionProc would not pick up the
-    // new command, so the click would be lost behind a row that looks done.
-    if (actionProc.running) return
-
-    // toggle: show the new state at once. omarchy-monitor-state can take
-    // seconds (the brightness probe of a DDC/CI display), and a stale row
-    // makes the next click repeat the same action.
-    var toggled = LayoutModel.withDisplayEnabled(root.displays, name, !enabled)
-    root.displays = toggled.displays
-    root.enabledDisplayCount = toggled.enabledDisplayCount
-    root.displayChanges++
-
-    actionProc.command = command
+    actionProc.command = ["hyprctl", "keyword", "monitor", name + (enabled ? ",disable" : ",preferred,auto,auto")]
     if (!actionProc.running) actionProc.running = true
   }
 
@@ -349,13 +325,6 @@ Panel {
     arrangement.forgetSetting(root.focusedMonitor, "scale")
     actionProc.command = ["bash", "-c", "omarchy-hyprland-monitor-scaling " + scale]
     if (!actionProc.running) actionProc.running = true
-  }
-
-  // Names no command: actionProc is shared, and either caller above may already
-  // have reassigned it. hyprctl quotes the spec it refused, which is the part
-  // worth having.
-  function warnRefusedAction() {
-    console.warn("monitor", "display action exited", actionProc.lastExitCode, String(actionStdout.text || "").trim())
   }
 
   // ---- Text size (shell base font + GTK text-scaling, via one CLI) ----
@@ -435,8 +404,6 @@ Panel {
   Process {
     id: stateProc
     command: ["omarchy-monitor-state"]
-    property int startedAt: 0
-    onRunningChanged: if (running) startedAt = root.displayChanges
     stdout: StdioCollector {
       waitForEnd: true
       onStreamFinished: {
@@ -450,9 +417,7 @@ Panel {
         root.mirrorEnabled = String(lines[4] || "").trim() === root.externalMonitor && root.externalMonitor !== ""
         root.focusedMonitor = String(lines[5] || "").trim()
         root.monitorScale = root.normalizeScale(String(lines[6] || "").trim())
-        // toggle: skip a displays list read before the last switch.
-        if (stateProc.startedAt === root.displayChanges)
-          root.updateDisplays(String(lines[7] || "[]").trim())
+        root.updateDisplays(String(lines[7] || "[]").trim())
       }
     }
   }
@@ -484,38 +449,8 @@ Panel {
 
   Process {
     id: actionProc
-    // hyprctl reports a refused monitor spec on stdout and exits 7, so without
-    // this a rejected change looks exactly like an applied one in the journal.
-    // Exit and stream-finished have no guaranteed order, so the code is held
-    // and whichever signal arrives second logs the pair, once.
-    property int lastExitCode: 0
-    property bool outputEnded: false
-
-    stdout: StdioCollector {
-      id: actionStdout
-      waitForEnd: true
-      onStreamFinished: {
-        actionProc.outputEnded = true
-        if (actionProc.lastExitCode !== 0) root.warnRefusedAction()
-      }
-    }
-
-    onExited: function(exitCode) {
-      actionProc.lastExitCode = exitCode
-      if (exitCode !== 0 && actionProc.outputEnded) root.warnRefusedAction()
-    }
-
-    onRunningChanged: {
-      if (running) {
-        actionProc.lastExitCode = 0
-        actionProc.outputEnded = false
-        return
-      }
-
-      // toggle: a read already running may predate what this action did.
-      root.displayChanges++
-      root.refresh()
-    }
+    stdout: StdioCollector { waitForEnd: true }
+    onRunningChanged: if (!running) root.refresh()
   }
 
   // Applies text size via the CLI, which rewrites the shell override file;

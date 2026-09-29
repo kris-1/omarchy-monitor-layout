@@ -487,3 +487,15 @@ test("positionsToLua stages stacked monitors at their target height", () => {
   const lines = Model.positionsToLua([{ name: "a", x: 0, y: 0 }, { name: "b", x: 0, y: 900 }], 5000).split("\n")
   assert.equal(lines[1], 'hl.monitor({ output = "b", position = "5000x900" })')
 })
+
+test("withDisplayEnabled switches one DISPLAYS row without touching the input", () => {
+  const rows = [{ name: "eDP-1", enabled: true }, { name: "DP-1", enabled: true }]
+  const off = Model.withDisplayEnabled(rows, "DP-1", false)
+  assert.deepEqual(off.displays, [{ name: "eDP-1", enabled: true }, { name: "DP-1", enabled: false }])
+  assert.equal(off.enabledDisplayCount, 1)
+  assert.equal(rows[1].enabled, true)
+  assert.equal(off.displays[0], rows[0])
+  const on = Model.withDisplayEnabled(off.displays, "DP-1", true)
+  assert.equal(on.enabledDisplayCount, 2)
+  assert.deepEqual(Model.withDisplayEnabled(null, "DP-1", true), { displays: [], enabledDisplayCount: 0 })
+})

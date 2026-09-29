@@ -17,7 +17,9 @@ for Hyprland, and nothing else. See README.md for the user-facing description.
   `Panel.qml` and `Model.js` are copies of Omarchy's
   `shell/plugins/panels/monitor/` (see NOTICE). Keep their diff against
   upstream limited to the `arrangement` wiring so upstream changes can be
-  merged; put new UI in `Arrangement.qml` (and the windows it opens,
+  merged (exception until it lands upstream: the display toggle fix from
+  omacom/omarchy#7036, copied verbatim, plus the "toggle" row update); put
+  new UI in `Arrangement.qml` (and the windows it opens,
   `MonitorProperties.qml`, `KeepSettingsDialog.qml`, `IdentifyOverlay.qml`).
 - `omarchy.clonedFrom: omarchy.monitor` stays in the manifest on purpose (it
   makes the plugin replace the built-in Display widget and receive its

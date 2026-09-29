@@ -6,6 +6,15 @@ All notable changes to this project are documented here. The format follows
 
 ## [Unreleased]
 
+### Fixed
+
+- Turning a display off or on in DISPLAYS works again on Hyprland 0.55+
+  (Lua config), which refuses `hyprctl keyword`: the change goes out through
+  `hyprctl eval`, and the laptop screen through
+  `omarchy-hyprland-monitor-internal`, as in omacom/omarchy#7036 (#1).
+- The DISPLAYS row shows the new state at once, so a second click no longer
+  repeats the first while the display state is still being read (#1).
+
 ## [0.7.0] - 2026-09-27
 
 ### Added
