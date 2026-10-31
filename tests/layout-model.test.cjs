@@ -214,9 +214,9 @@ test("cleanSettings drops invalid fields and garbage", () => {
 })
 
 test("parseLayout tolerates invalid JSON and drops invalid monitor fields", () => {
-  assert.deepEqual(Model.parseLayout(""), { order: [], monitors: {}, withExternal: "extend", stack: {} })
-  assert.deepEqual(Model.parseLayout("not json"), { order: [], monitors: {}, withExternal: "extend", stack: {} })
-  assert.deepEqual(Model.parseLayout('{"order": ["a"], "monitors": "nope"}'), { order: ["a"], monitors: {}, withExternal: "extend", stack: {} })
+  assert.deepEqual(Model.parseLayout(""), { order: [], monitors: {}, withExternal: "extend", stack: {}, offsets: {} })
+  assert.deepEqual(Model.parseLayout("not json"), { order: [], monitors: {}, withExternal: "extend", stack: {}, offsets: {} })
+  assert.deepEqual(Model.parseLayout('{"order": ["a"], "monitors": "nope"}'), { order: ["a"], monitors: {}, withExternal: "extend", stack: {}, offsets: {} })
   const parsed = Model.parseLayout(JSON.stringify({
     order: ["a", "b"],
     monitors: {
@@ -224,7 +224,7 @@ test("parseLayout tolerates invalid JSON and drops invalid monitor fields", () =
       b: { scale: -5 } // cleans to {} entirely
     }
   }))
-  assert.deepEqual(parsed, { order: ["a", "b"], monitors: { a: { mode: "3440x1440@99.98", scale: 5 } }, withExternal: "extend", stack: {} })
+  assert.deepEqual(parsed, { order: ["a", "b"], monitors: { a: { mode: "3440x1440@99.98", scale: 5 } }, withExternal: "extend", stack: {}, offsets: {} })
 })
 
 test("serializeOrder output is unchanged", () => {
@@ -234,7 +234,7 @@ test("serializeOrder output is unchanged", () => {
 
 test("serializeLayout omits monitors when empty and round-trips otherwise", () => {
   assert.equal(Model.serializeLayout({ order: ["a"], monitors: {} }), Model.serializeOrder(["a"]))
-  const layout = { order: ["a"], monitors: { a: { scale: 1.25 } }, withExternal: "mirror", stack: { b: { on: "a", side: "above" } } }
+  const layout = { order: ["a"], monitors: { a: { scale: 1.25 } }, withExternal: "mirror", stack: { b: { on: "a", side: "above" } }, offsets: { a: { x: 10, y: -20 } } }
   assert.deepEqual(Model.parseLayout(Model.serializeLayout(layout)), layout)
 })
 
@@ -437,6 +437,13 @@ test("computePositions stacks below and ignores stacks on unplugged monitors", (
   assert.deepEqual(alone.map(p => [p.name, p.x, p.y]), [["eDP-1", 0, 0]])
 })
 
+test("computePositions applies custom offsets on top of the row", () => {
+  const offsets = { [Model.monitorKey(laptop)]: { x: 0, y: 200 } }
+  const positions = Object.fromEntries(Model.computePositions([laptop, ultrawide], [], {}, offsets).map(p => [p.name, [p.x, p.y]]))
+  // Laptop shifts down 200; the whole layout is re-based so minY stays 0.
+  assert.deepEqual(positions, { "HDMI-A-1": [1536, 0], "eDP-1": [0, 200] })
+})
+
 test("activeStack drops loops", () => {
   const a = { ...laptop }, b = { ...ultrawide }
   const ka = Model.monitorKey(a), kb = Model.monitorKey(b)
@@ -458,6 +465,26 @@ test("withRowPosition unstacks into the row at an index", () => {
   const moved = Model.withRowPosition(layout, "B", ["A", "C"], 1)
   assert.deepEqual(moved.order, ["A", "B", "C"])
   assert.deepEqual(moved.stack, {})
+})
+
+test("withOffset accumulates and clears per-monitor shifts", () => {
+  let layout = { order: ["A", "B"], monitors: {}, offsets: {} }
+  layout = Model.withOffset(layout, "B", 0, 120)
+  assert.deepEqual(layout.offsets, { B: { x: 0, y: 120 } })
+  layout = Model.withOffset(layout, "B", 30, -20)
+  assert.deepEqual(layout.offsets, { B: { x: 30, y: 100 } })
+  layout = Model.withOffset(layout, "B", -30, -100)
+  assert.deepEqual(layout.offsets, {})
+})
+
+test("cleanOffsets keeps only finite non-zero shifts", () => {
+  assert.deepEqual(Model.cleanOffsets({
+    a: { x: 10, y: -20 },
+    b: { x: 0, y: 0 },
+    c: { x: "bad", y: 1 },
+    d: "garbage",
+    "": { x: 1, y: 1 }
+  }), { a: { x: 10, y: -20 } })
 })
 
 test("cleanStack keeps only well-formed entries", () => {

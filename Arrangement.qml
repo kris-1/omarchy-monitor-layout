@@ -174,15 +174,47 @@ Column {
     }
   }
 
+  // Push a dragged tile out of any monitor it would overlap, along the axis
+  // with the smallest overlap. Keeps free positioning useful without letting
+  // Hyprland warn about overlapping monitor regions.
+  function avoidOverlap(tile, lx, ly) {
+    var rect = { x: tile.x + lx, y: tile.y + ly, w: tile.w, h: tile.h }
+    for (var i = 0; i < tiles.length; i++) {
+      var other = tiles[i]
+      if (other.key === tile.key) continue
+      var ox = Math.max(0, Math.min(rect.x + rect.w, other.x + other.w) - Math.max(rect.x, other.x))
+      var oy = Math.max(0, Math.min(rect.y + rect.h, other.y + other.h) - Math.max(rect.y, other.y))
+      if (ox <= 0 || oy <= 0) continue
+      if (ox < oy) {
+        lx += rect.x + rect.w / 2 < other.x + other.w / 2 ? -ox : ox
+      } else {
+        ly += rect.y + rect.h / 2 < other.y + other.h / 2 ? -oy : oy
+      }
+      rect.x = tile.x + lx
+      rect.y = tile.y + ly
+    }
+    return { x: lx, y: ly }
+  }
+
   // Where a dragged tile was dropped (LayoutModel.dropTarget): persist and
-  // apply it; the tiles follow once the live layout has moved.
-  function dropTile(from, target) {
+  // apply it; the tiles follow once the live layout has moved. When the drop
+  // keeps the tile at the same row index, the drag is treated as a free
+  // position adjustment and stored as a per-monitor offset instead.
+  function dropTile(from, target, dx, dy) {
     var tile = tiles[from]
     if (!tile || !target) return
-    if (target.side === "row")
-      saveLayout(LayoutModel.withRowPosition(orderFile.layout, tile.key, rowKeys(), target.index))
-    else
+    if (target.side === "row") {
+      var row = rowKeys()
+      var currentIndex = row.indexOf(tile.key)
+      if (target.index === currentIndex && currentIndex >= 0) {
+        var adjusted = avoidOverlap(tile, Math.round(dx / canvas.unit), Math.round(dy / canvas.unit))
+        saveLayout(LayoutModel.withOffset(orderFile.layout, tile.key, adjusted.x, adjusted.y))
+        return
+      }
+      saveLayout(LayoutModel.withRowPosition(orderFile.layout, tile.key, row, target.index))
+    } else {
       saveLayout(LayoutModel.withStacked(orderFile.layout, tile.key, target.on, target.side))
+    }
   }
 
   function saveLayout(layout) {
@@ -385,7 +417,7 @@ Column {
         dragX = 0
         dragY = 0
         if (from < 0 || (Math.abs(dx) < 2 && Math.abs(dy) < 2)) return
-        root.dropTile(from, target(from, dx, dy))
+        root.dropTile(from, target(from, dx, dy), dx, dy)
       }
 
       Repeater {
