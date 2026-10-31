@@ -120,7 +120,8 @@ function parseLayout(text) {
     order: order,
     monitors: monitors,
     withExternal: cleanExternalMode(data && data.withExternal),
-    stack: cleanStack(data && data.stack)
+    stack: cleanStack(data && data.stack),
+    offsets: cleanOffsets(data && data.offsets)
   }
 }
 
@@ -139,6 +140,8 @@ function serializeLayout(layout) {
   if (mode !== "extend") data.withExternal = mode
   var stack = cleanStack(layout && layout.stack)
   if (Object.keys(stack).length > 0) data.stack = stack
+  var offsets = cleanOffsets(layout && layout.offsets)
+  if (Object.keys(offsets).length > 0) data.offsets = offsets
   return JSON.stringify(data, null, 2) + "\n"
 }
 
@@ -489,8 +492,9 @@ function activeStack(monitors, stack) {
 
 // [{ name, x, y, changed }] for every arrangeable monitor. Row monitors go
 // left to right, top-aligned; stacked ones are centered above or below the
-// monitor they stand on. Everything is shifted so the layout starts at 0x0.
-function computePositions(monitors, order, stack) {
+// monitor they stand on. `offsets` adds a per-monitor { x, y } shift on top
+// of that base position. Everything is shifted so the layout starts at 0x0.
+function computePositions(monitors, order, stack, offsets) {
   var active = activeStack(monitors, stack)
   var list = (monitors || []).filter(isArrangeable)
   var shared = sharedDescriptions(list)
@@ -524,6 +528,15 @@ function computePositions(monitors, order, stack) {
     return placed[key]
   }
   for (var key in active) place(key)
+
+  // Apply user-dragged offsets on top of the automatic row/stack positions.
+  var custom = cleanOffsets(offsets)
+  for (var k in custom) {
+    if (placed[k]) {
+      placed[k].x += custom[k].x
+      placed[k].y += custom[k].y
+    }
+  }
 
   var minX = 0
   var minY = 0
@@ -601,12 +614,31 @@ function withRowPosition(layout, key, rowKeys, index) {
   return copy
 }
 
+// Layout with `key` shifted by (dx, dy) logical pixels relative to its
+// automatic row/stack position. Passing (0, 0) clears a previously saved
+// offset; the entry is dropped entirely when it returns to zero.
+function withOffset(layout, key, dx, dy) {
+  var offsets = {}
+  var source = (layout && layout.offsets) || {}
+  for (var k in source) {
+    if (Object.prototype.hasOwnProperty.call(source, k) && k !== key) offsets[k] = source[k]
+  }
+  var existing = source[key] || { x: 0, y: 0 }
+  var x = Math.round((Number(existing.x) || 0) + (Number(dx) || 0))
+  var y = Math.round((Number(existing.y) || 0) + (Number(dy) || 0))
+  if (x !== 0 || y !== 0) offsets[key] = { x: x, y: y }
+  var copy = copyLayout(layout)
+  copy.offsets = offsets
+  return copy
+}
+
 function copyLayout(layout) {
   return {
     order: ((layout && layout.order) || []).slice(),
     monitors: (layout && layout.monitors) || {},
     withExternal: cleanExternalMode(layout && layout.withExternal),
-    stack: (layout && layout.stack) || {}
+    stack: (layout && layout.stack) || {},
+    offsets: (layout && layout.offsets) || {}
   }
 }
 
@@ -622,6 +654,25 @@ function cleanStack(raw) {
     stack[key] = { on: entry.on, side: entry.side }
   }
   return stack
+}
+
+// Only finite numeric { x, y } entries keyed by a non-empty string. Zero
+// offsets are dropped so the saved file stays minimal.
+function cleanOffsets(raw) {
+  var offsets = {}
+  if (!raw || typeof raw !== "object") return offsets
+  for (var key in raw) {
+    if (!Object.prototype.hasOwnProperty.call(raw, key) || key === "") continue
+    var entry = raw[key]
+    if (!entry || typeof entry !== "object") continue
+    var x = Number(entry.x)
+    var y = Number(entry.y)
+    if (!isFinite(x) || !isFinite(y)) continue
+    x = Math.round(x)
+    y = Math.round(y)
+    if (x !== 0 || y !== 0) offsets[key] = { x: x, y: y }
+  }
+  return offsets
 }
 
 // Where a tile dragged in the preview lands. `tiles`: [{ key, left, top,
@@ -837,7 +888,9 @@ if (typeof module !== "undefined") {
     activeStack: activeStack,
     withStacked: withStacked,
     withRowPosition: withRowPosition,
+    withOffset: withOffset,
     cleanStack: cleanStack,
+    cleanOffsets: cleanOffsets,
     dropTarget: dropTarget,
     stagingX: stagingX,
     positionsToLua: positionsToLua,
